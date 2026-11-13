@@ -1,0 +1,47 @@
+import { DashboardMock } from '@/components/dashboard-mock'
+import { Check } from 'lucide-react'
+
+const points = [
+  'Drag-and-drop chart builder with 30+ visualization types',
+  'Real-time filters, drill-downs, and cross-chart highlighting',
+  'Share live dashboards or export to PDF and PNG',
+]
+
+export function DashboardPreview() {
+  return (
+    <section id="dashboard" className="py-24">
+      <div className="mx-auto w-[min(1120px,calc(100%-1.5rem))]">
+        <div className="grid items-center gap-12 lg:grid-cols-2">
+          <div className="order-2 lg:order-1">
+            <DashboardMock />
+          </div>
+
+          <div className="order-1 lg:order-2">
+            <span className="text-sm font-medium text-primary">Dashboard</span>
+            <h2 className="mt-3 text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
+              Dashboards that build themselves
+            </h2>
+            <p className="mt-4 text-pretty leading-relaxed text-muted-foreground">
+              InsightFlow reads the shape of your data and assembles the right
+              charts automatically. Adjust, rearrange, and theme everything with
+              a beautiful, intuitive editor.
+            </p>
+
+            <ul className="mt-8 space-y-4">
+              {points.map((point) => (
+                <li key={point} className="flex items-start gap-3">
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success/20 text-success">
+                    <Check className="h-3 w-3" />
+                  </span>
+                  <span className="text-sm leading-relaxed text-muted-foreground">
+                    {point}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
