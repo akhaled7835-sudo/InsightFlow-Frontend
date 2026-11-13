@@ -1,13 +1,15 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { FileSpreadsheet, ArrowUpRight, FolderKanban } from 'lucide-react'
 import { apiRequest, getSession } from '@/lib/api'
+import { useTranslation } from '@/lib/i18n'
 
 export function RecentProjects() {
   const [projects, setProjects] = useState<Array<{ id: string; name: string; description?: string; status?: string }>>([])
   const [loading, setLoading] = useState(true)
+  const { t } = useTranslation()
 
   useEffect(() => {
     async function load() {
@@ -50,17 +52,17 @@ export function RecentProjects() {
     <div className="glass rounded-2xl p-5">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h3 className="text-base font-semibold tracking-tight">Workspace Projects</h3>
-          <p className="text-sm text-muted-foreground">Live projects connected to your API</p>
+          <h3 className="text-base font-semibold tracking-tight">{t.workspaceProjects}</h3>
+          <p className="text-sm text-muted-foreground">{t.liveProjectsApi}</p>
         </div>
         <Link href="/upload" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-          New upload <ArrowUpRight className="h-3.5 w-3.5" />
+          {t.newUpload} <ArrowUpRight className="h-3.5 w-3.5" />
         </Link>
       </div>
       <div className="space-y-2">
-        {loading && <p className="text-xs text-muted-foreground">Loading projects...</p>}
+        {loading && <p className="text-xs text-muted-foreground">{t.loadingProjects}</p>}
         {!loading && projects.length === 0 && (
-          <p className="text-xs text-muted-foreground">No projects yet. Go to Upload to create your first project.</p>
+          <p className="text-xs text-muted-foreground">{t.noProjectsYet}</p>
         )}
         {projects.map((p) => (
           <Link
@@ -88,32 +90,33 @@ export function RecentProjects() {
 }
 
 export function RecentFiles() {
+  const { t } = useTranslation()
   return (
     <div className="glass rounded-2xl p-5">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h3 className="text-base font-semibold tracking-tight">Data Pipeline & Quotas</h3>
-          <p className="text-sm text-muted-foreground">Supported formats & daily limits</p>
+          <h3 className="text-base font-semibold tracking-tight">{t.dataPipelineQuotas}</h3>
+          <p className="text-sm text-muted-foreground">{t.supportedFormatsLimits}</p>
         </div>
         <Link href="/upload" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-          Upload file <ArrowUpRight className="h-3.5 w-3.5" />
+          {t.uploadFile} <ArrowUpRight className="h-3.5 w-3.5" />
         </Link>
       </div>
       <div className="space-y-2.5 text-xs">
         <div className="flex items-center justify-between rounded-xl border border-border bg-background/40 p-3">
           <div className="flex items-center gap-2.5">
             <FileSpreadsheet className="h-4 w-4 text-emerald-400" />
-            <span className="font-medium text-foreground">Excel (.xlsx) & CSV (.csv)</span>
+            <span className="font-medium text-foreground">Excel (.xlsx) &amp; CSV (.csv)</span>
           </div>
-          <span className="text-muted-foreground">Auto-cleaned</span>
+          <span className="text-muted-foreground">{t.autoCleaned}</span>
         </div>
         <div className="flex items-center justify-between rounded-xl border border-border bg-background/40 p-3">
-          <span className="text-muted-foreground">Demo Account Quota</span>
-          <span className="font-medium text-amber-300">1 file / 30-min session</span>
+          <span className="text-muted-foreground">{t.demoAccountQuota}</span>
+          <span className="font-medium text-amber-300">{t.demoQuotaVal}</span>
         </div>
         <div className="flex items-center justify-between rounded-xl border border-border bg-background/40 p-3">
-          <span className="text-muted-foreground">Standard Account Quota</span>
-          <span className="font-medium text-primary">3 files / day</span>
+          <span className="text-muted-foreground">{t.standardAccountQuota}</span>
+          <span className="font-medium text-primary">{t.standardQuotaVal}</span>
         </div>
       </div>
     </div>

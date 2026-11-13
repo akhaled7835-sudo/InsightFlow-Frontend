@@ -1,4 +1,7 @@
+'use client'
+
 import { Upload, Sparkles, UserPlus, FileCheck, GitBranch } from 'lucide-react'
+import { useTranslation } from '@/lib/i18n'
 
 const activity = [
   { icon: Sparkles, tone: 'text-primary bg-primary/15', who: 'AI Engine', what: 'generated the Q3 Revenue Analysis report', when: '2 min ago' },
@@ -9,17 +12,15 @@ const activity = [
 ]
 
 export function ActivityTimeline() {
+  const { t } = useTranslation()
   return (
     <div className="glass rounded-2xl p-5">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-base font-semibold tracking-tight">Activity Timeline</h3>
-        <button className="text-sm font-medium text-primary hover:underline">View all</button>
+        <h3 className="text-base font-semibold tracking-tight">{t.activityTimeline}</h3>
+        <button className="text-sm font-medium text-primary hover:underline">{t.viewAll}</button>
       </div>
       <div className="relative">
-        <span
-          aria-hidden="true"
-          className="absolute bottom-2 left-[18px] top-2 w-px bg-border"
-        />
+        <span aria-hidden="true" className="absolute bottom-2 start-[18px] top-2 w-px bg-border" />
         <ul className="space-y-4">
           {activity.map((a) => (
             <li key={a.who + a.what} className="relative flex gap-4">

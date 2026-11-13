@@ -1,49 +1,17 @@
-﻿'use client'
+'use client'
 
 import Link from 'next/link'
-import {
-  Sparkles,
-  TrendingUp,
-  AlertTriangle,
-  Lightbulb,
-  Upload,
-  FileBarChart,
-  Globe,
-  Plus,
-} from 'lucide-react'
-
-const insights = [
-  {
-    icon: TrendingUp,
-    tone: 'text-emerald-400',
-    bg: 'bg-emerald-500/15',
-    title: 'Automated Data Cleaning',
-    body: 'Duplicate rows and missing values are automatically detected and sanitized upon upload.',
-  },
-  {
-    icon: Lightbulb,
-    tone: 'text-primary',
-    bg: 'bg-primary/15',
-    title: '8-Language AI Insights',
-    body: 'Switch languages in the top bar (AR, EN, DE, ES, IT, FR, RU, TR) to generate localized insights.',
-  },
-  {
-    icon: AlertTriangle,
-    tone: 'text-amber-400',
-    bg: 'bg-amber-500/15',
-    title: 'Executive Report Export',
-    body: 'Download boardroom-ready PDF or Excel (.xlsx) reports immediately after dataset analysis.',
-  },
-]
-
-const actions = [
-  { label: 'Upload Data', href: '/upload', icon: Upload },
-  { label: 'Generate Report', href: '/upload', icon: FileBarChart },
-  { label: 'New Project', href: '/upload', icon: Plus },
-  { label: 'Switch Language', href: '/dashboard', icon: Globe },
-]
+import { Sparkles, TrendingUp, AlertTriangle, Lightbulb, Upload, FileBarChart, Globe, Plus } from 'lucide-react'
+import { useTranslation } from '@/lib/i18n'
 
 export function InsightsPanel() {
+  const { t } = useTranslation()
+  const insights = [
+    { icon: TrendingUp, tone: 'text-emerald-400', bg: 'bg-emerald-500/15', title: t.cap1Title, body: t.cap1Body },
+    { icon: Lightbulb, tone: 'text-primary', bg: 'bg-primary/15', title: t.cap2Title, body: t.cap2Body },
+    { icon: AlertTriangle, tone: 'text-amber-400', bg: 'bg-amber-500/15', title: t.cap3Title, body: t.cap3Body },
+  ]
+
   return (
     <div className="glass relative overflow-hidden rounded-2xl p-5">
       <div className="mb-4 flex items-center gap-2">
@@ -51,24 +19,19 @@ export function InsightsPanel() {
           <Sparkles className="h-4 w-4" />
         </span>
         <div>
-          <h3 className="text-base font-semibold tracking-tight">AI Engine Capabilities</h3>
-          <p className="text-xs text-muted-foreground">Connected to InsightFlow .NET 10 API</p>
+          <h3 className="text-base font-semibold tracking-tight">{t.aiEngineCap}</h3>
+          <p className="text-xs text-muted-foreground">{t.connectedDotnet}</p>
         </div>
       </div>
       <div className="space-y-2.5">
-        {insights.map((insight) => (
-          <div
-            key={insight.title}
-            className="flex items-start gap-3 rounded-xl border border-border bg-background/40 p-3.5"
-          >
+        {insights.map((insight, i) => (
+          <div key={i} className="flex items-start gap-3 rounded-xl border border-border bg-background/40 p-3.5">
             <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${insight.bg} ${insight.tone}`}>
               <insight.icon className="h-4 w-4" />
             </span>
             <div>
               <p className="text-sm font-medium">{insight.title}</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                {insight.body}
-              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{insight.body}</p>
             </div>
           </div>
         ))}
@@ -78,13 +41,21 @@ export function InsightsPanel() {
 }
 
 export function QuickActions() {
+  const { t } = useTranslation()
+  const actions = [
+    { label: t.uploadData, href: '/upload', icon: Upload },
+    { label: t.generateReport, href: '/upload', icon: FileBarChart },
+    { label: t.newProjectBtn, href: '/upload', icon: Plus },
+    { label: t.switchLanguage, href: '/dashboard', icon: Globe },
+  ]
+
   return (
     <div className="glass rounded-2xl p-5">
-      <h3 className="mb-4 text-base font-semibold tracking-tight">Quick Actions</h3>
+      <h3 className="mb-4 text-base font-semibold tracking-tight">{t.quickActions}</h3>
       <div className="grid grid-cols-2 gap-3">
-        {actions.map((a) => (
+        {actions.map((a, i) => (
           <Link
-            key={a.label}
+            key={i}
             href={a.href}
             className="flex flex-col items-center justify-center gap-2 rounded-xl border border-border bg-background/40 py-5 text-sm font-medium transition-colors hover:border-primary/40 hover:bg-primary/10"
           >

@@ -2,6 +2,7 @@
 
 import { Sparkles, Send, Zap, CalendarClock, ArrowRight } from 'lucide-react'
 import { useState } from 'react'
+import { useTranslation } from '@/lib/i18n'
 
 const suggestions = [
   'Summarize this month\u2019s revenue',
@@ -23,27 +24,25 @@ const reports = [
 
 export function RightSidebar() {
   const [value, setValue] = useState('')
+  const { t } = useTranslation()
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      {/* AI assistant */}
       <div className="glass overflow-hidden rounded-2xl">
         <div className="flex items-center gap-2 border-b border-border bg-primary/10 px-4 py-3">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <Sparkles className="h-4 w-4" />
           </span>
           <div>
-            <p className="text-sm font-semibold">AI Assistant</p>
+            <p className="text-sm font-semibold">{t.aiAssistant}</p>
             <p className="flex items-center gap-1 text-xs text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-success" /> Online
+              <span className="h-1.5 w-1.5 rounded-full bg-success" /> {t.online}
             </p>
           </div>
         </div>
         <div className="space-y-3 p-4">
-          <div className="rounded-xl rounded-tl-sm bg-secondary p-3 text-sm leading-relaxed">
-            Hi Sarah! Revenue is up{' '}
-            <span className="font-medium text-success">18.2%</span> this month. Want me
-            to break down what drove the growth?
+          <div className="rounded-xl rounded-ss-sm bg-secondary p-3 text-sm leading-relaxed">
+            {t.aiCard1Body}
           </div>
           <div className="flex flex-wrap gap-2">
             {suggestions.map((s) => (
@@ -60,11 +59,11 @@ export function RightSidebar() {
             <input
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              placeholder="Ask anything about your data..."
-              className="h-11 w-full rounded-xl border border-border bg-background/60 pl-4 pr-11 text-sm placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
+              placeholder={t.askAnythingData}
+              className="h-11 w-full rounded-xl border border-border bg-background/60 ps-4 pe-11 text-sm placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
             <button
-              className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-opacity hover:opacity-90"
+              className="absolute end-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-opacity hover:opacity-90"
               aria-label="Send"
             >
               <Send className="h-4 w-4" />
@@ -73,17 +72,16 @@ export function RightSidebar() {
         </div>
       </div>
 
-      {/* recommendations */}
       <div className="glass rounded-2xl p-4">
         <div className="mb-3 flex items-center gap-2">
           <Zap className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold">Recommendations</h3>
+          <h3 className="text-sm font-semibold">{t.recommendations}</h3>
         </div>
         <div className="space-y-2">
           {recommendations.map((r) => (
             <button
               key={r.title}
-              className="flex w-full items-start gap-3 rounded-xl border border-border bg-background/40 p-3 text-left transition-colors hover:border-primary/30"
+              className="flex w-full items-start gap-3 rounded-xl border border-border bg-background/40 p-3 text-start transition-colors hover:border-primary/30"
             >
               <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${r.tone}`}>
                 <Zap className="h-3.5 w-3.5" />
@@ -92,24 +90,20 @@ export function RightSidebar() {
                 <p className="text-sm font-medium">{r.title}</p>
                 <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{r.body}</p>
               </div>
-              <ArrowRight className="ml-auto mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+              <ArrowRight className="ms-auto mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
             </button>
           ))}
         </div>
       </div>
 
-      {/* upcoming reports */}
       <div className="glass rounded-2xl p-4">
         <div className="mb-3 flex items-center gap-2">
           <CalendarClock className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold">Upcoming Reports</h3>
+          <h3 className="text-sm font-semibold">{t.upcomingReports}</h3>
         </div>
         <div className="space-y-2">
           {reports.map((r) => (
-            <div
-              key={r.name}
-              className="flex items-center gap-3 rounded-xl border border-border bg-background/40 p-3"
-            >
+            <div key={r.name} className="flex items-center gap-3 rounded-xl border border-border bg-background/40 p-3">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{r.name}</p>
                 <p className="text-xs text-muted-foreground">{r.when}</p>
