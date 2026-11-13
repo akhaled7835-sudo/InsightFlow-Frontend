@@ -1,21 +1,23 @@
-﻿'use client'
+'use client'
 
 import { useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { BarChart3, Menu, X } from 'lucide-react'
 import { LanguageSwitcher } from '@/components/language-switcher'
-
-const links = [
-  { label: 'Features', href: '#features' },
-  { label: 'Dashboard', href: '#dashboard' },
-  { label: 'Insights', href: '#insights' },
-  { label: 'Pricing', href: '#pricing' },
-  { label: 'FAQ', href: '#faq' },
-]
+import { useTranslation } from '@/lib/i18n'
 
 export function Navbar() {
   const [open, setOpen] = useState(false)
+  const { t } = useTranslation()
+
+  const links = [
+    { label: t.features, href: '#features' },
+    { label: t.dashboard, href: '#dashboard' },
+    { label: t.insights, href: '#insights' },
+    { label: t.pricing, href: '#pricing' },
+    { label: t.faq, href: '#faq' },
+  ]
 
   return (
     <header className="fixed inset-x-0 top-0 z-50">
@@ -44,12 +46,12 @@ export function Navbar() {
             <LanguageSwitcher />
             <Link href="/login">
               <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
-                Sign in
+                {t.signIn}
               </Button>
             </Link>
             <Link href="/login">
               <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
-                Try Live Demo
+                {t.tryLiveDemo}
               </Button>
             </Link>
           </div>
@@ -82,11 +84,11 @@ export function Navbar() {
             ))}
             <div className="mt-2 flex flex-col gap-2">
               <Link href="/login" onClick={() => setOpen(false)}>
-                <Button variant="ghost" className="w-full">Sign in</Button>
+                <Button variant="ghost" className="w-full">{t.signIn}</Button>
               </Link>
               <Link href="/login" onClick={() => setOpen(false)}>
                 <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-                  Try Live Demo
+                  {t.tryLiveDemo}
                 </Button>
               </Link>
             </div>
