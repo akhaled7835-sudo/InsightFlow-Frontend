@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -15,6 +15,7 @@ import {
   Download,
 } from 'lucide-react'
 import { apiRequest, getSession, ApiError, API_BASE_URL, TOKEN_KEY, getLang } from '@/lib/api'
+import { useTranslation } from '@/lib/i18n'
 
 type FileStatus = 'uploading' | 'processing' | 'success' | 'error'
 
@@ -50,6 +51,7 @@ function formatSize(bytes: number) {
 }
 
 export function UploadManager() {
+  const { t } = useTranslation()
   const [dragging, setDragging] = useState(false)
   const [files, setFiles] = useState<UploadFile[]>([])
   const [workspaceId, setWorkspaceId] = useState<string>('')
@@ -304,7 +306,7 @@ export function UploadManager() {
       <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card/50 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
           <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Target Project:
+            {t.targetProject}
           </label>
           <select
             value={selectedProjectId}
@@ -326,7 +328,7 @@ export function UploadManager() {
               type="text"
               value={newProjectName}
               onChange={(e) => setNewProjectName(e.target.value)}
-              placeholder="New project name..."
+              placeholder={t.newProjectPlaceholder}
               className="h-10 rounded-xl border border-input bg-secondary/40 px-3 text-sm outline-none focus:border-primary"
             />
             <button
@@ -335,7 +337,7 @@ export function UploadManager() {
               className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-secondary px-3 text-xs font-medium hover:bg-secondary/80 disabled:opacity-50"
             >
               <FolderPlus className="h-4 w-4 text-primary" />
-              New Project
+              {t.newProjectBtn}
             </button>
           </form>
         )}
@@ -362,10 +364,10 @@ export function UploadManager() {
         </span>
         <div>
           <p className="text-base font-semibold">
-            {dragging ? 'Drop your Excel or CSV file here' : 'Drag & drop your Excel or CSV file'}
+            {dragging ? 'Drop your Excel or CSV file here' : '{t.dropzoneTitle}'}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Auto-cleans duplicates, computes statistics & generates AI insights in your selected language
+            {t.dropzoneSubtitle}
           </p>
         </div>
         <button
@@ -374,7 +376,7 @@ export function UploadManager() {
           className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" />
-          Select File (.xlsx / .csv)
+          {t.selectFileBtn}
         </button>
         <input
           ref={inputRef}
@@ -420,18 +422,18 @@ export function UploadManager() {
                   </p>
                   {f.status === 'uploading' && (
                     <p className="mt-1.5 flex items-center gap-1.5 text-xs text-primary">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading to InsightFlow...
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> {t.uploadingStatus}
                     </p>
                   )}
                   {f.status === 'processing' && (
                     <p className="mt-1.5 flex items-center gap-1.5 text-xs text-amber-300">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cleaning data & generating AI insights...
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> {t.processingStatus}
                     </p>
                   )}
                   {f.status === 'success' && (
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                       <span className="flex items-center gap-1 text-xs font-medium text-emerald-400">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> Cleaned, analyzed & AI insights ready
+                        <CheckCircle2 className="h-3.5 w-3.5" /> {t.successStatus}
                       </span>
                       <div className="flex items-center gap-2">
                         <button
@@ -440,7 +442,7 @@ export function UploadManager() {
                           onClick={() => handleExportReport('pdf', f)}
                           className="inline-flex items-center gap-1 rounded-lg border border-border bg-secondary px-2.5 py-1 text-xs font-medium hover:bg-secondary/80"
                         >
-                          <Download className="h-3.5 w-3.5 text-primary" /> Export PDF
+                          <Download className="h-3.5 w-3.5 text-primary" /> {t.exportPdf}
                         </button>
                         <button
                           type="button"
@@ -448,7 +450,7 @@ export function UploadManager() {
                           onClick={() => handleExportReport('excel', f)}
                           className="inline-flex items-center gap-1 rounded-lg border border-border bg-secondary px-2.5 py-1 text-xs font-medium hover:bg-secondary/80"
                         >
-                          <Download className="h-3.5 w-3.5 text-emerald-400" /> Export Excel
+                          <Download className="h-3.5 w-3.5 text-emerald-400" /> {t.exportExcel}
                         </button>
                       </div>
                     </div>
@@ -470,7 +472,7 @@ export function UploadManager() {
         <div className="rounded-2xl border border-primary/30 bg-card/60 p-5">
           <div className="mb-4 flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            <h3 className="text-base font-semibold">AI Business Insights — {latestSuccess.name}</h3>
+            <h3 className="text-base font-semibold">{t.aiInsightsTitle} — {latestSuccess.name}</h3>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             {latestSuccess.insights.map((ins, idx) => (
