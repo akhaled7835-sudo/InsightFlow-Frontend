@@ -1,10 +1,9 @@
 ﻿export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "https://insightflow.runasp.net";
-
+  (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_API_URL) ||
+  "https://insightflow.runasp.net";
 export const TOKEN_KEY = "insightflow_token";
 export const SESSION_KEY = "insightflow_session";
 export const LANG_KEY = "insightflow_lang";
-
 export interface AuthSession {
   token: string;
   userId?: string;
