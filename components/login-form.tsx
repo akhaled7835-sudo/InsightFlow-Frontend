@@ -55,7 +55,12 @@ export function LoginForm() {
       } else if (mode === "register") {
         const res = await apiRequest<any>("/api/auth/register", {
           method: "POST",
-          body: JSON.stringify({ fullName, email, password }),
+          body: JSON.stringify({
+            fullName,
+            email,
+            password,
+            confirmPassword: password,
+          }),
         })
         saveSession({
           token: res.token,
