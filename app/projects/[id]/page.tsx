@@ -33,7 +33,7 @@ export default function ProjectDashboardPage() {
           const projRes = await apiRequest<any>(`/api/workspaces/${wsId}/projects/${projectId}`)
           setProject(projRes)
 
-          // 2. جلب ملفات المشروع المحفوظة في الباك إند
+          // 2. جلب ملفات المشروع
           const filesRes = await apiRequest<any>(`/api/projects/${projectId}/files`).catch(() => [])
           const list = Array.isArray(filesRes) ? filesRes : filesRes?.items || filesRes?.data || projRes?.datasets || []
           setDatasets(list)
@@ -58,7 +58,12 @@ export default function ProjectDashboardPage() {
     )
   }
 
+  // استخراج أحدث ملف مع فحص جميع الاحتمالات لمسميات الـ C#
   const activeDataset = datasets[datasets.length - 1] || project?.datasets?.[project?.datasets?.length - 1]
+
+  const totalFiles = datasets.length > 0 ? datasets.length : (activeDataset ? 1 : 0)
+  const totalRows = activeDataset?.rowCount ?? activeDataset?.RowCount ?? activeDataset?.rows ?? activeDataset?.Rows ?? 0
+  const totalColumns = activeDataset?.columnCount ?? activeDataset?.ColumnCount ?? activeDataset?.columns ?? activeDataset?.Columns ?? 0
 
   return (
     <DashboardShell>
@@ -94,7 +99,7 @@ export default function ProjectDashboardPage() {
               <span className="text-xs text-muted-foreground">إجمالي الملفات المرفوعة</span>
               <FileSpreadsheet className="h-4 w-4 text-primary" />
             </div>
-            <p className="mt-3 text-2xl font-bold">{datasets.length > 0 ? datasets.length : (activeDataset ? 1 : 1)}</p>
+            <p className="mt-3 text-2xl font-bold">{totalFiles}</p>
             <p className="mt-1 text-[11px] text-emerald-400">ملفات مرتبطة بهذا المشروع</p>
           </div>
 
@@ -103,7 +108,7 @@ export default function ProjectDashboardPage() {
               <span className="text-xs text-muted-foreground">عدد السجلات (الصفوف)</span>
               <Layers className="h-4 w-4 text-primary" />
             </div>
-            <p className="mt-3 text-2xl font-bold">{activeDataset?.rowCount || activeDataset?.rows || 1250}</p>
+            <p className="mt-3 text-2xl font-bold">{totalRows}</p>
             <p className="mt-1 text-[11px] text-muted-foreground">من آخر ملف تم تحليله</p>
           </div>
 
@@ -112,7 +117,7 @@ export default function ProjectDashboardPage() {
               <span className="text-xs text-muted-foreground">عدد الأعمدة (المتغيرات)</span>
               <Columns className="h-4 w-4 text-primary" />
             </div>
-            <p className="mt-3 text-2xl font-bold">{activeDataset?.columnCount || activeDataset?.columns || 8}</p>
+            <p className="mt-3 text-2xl font-bold">{totalColumns}</p>
             <p className="mt-1 text-[11px] text-muted-foreground">مؤشرات البيانات المتاحة</p>
           </div>
         </div>
@@ -128,7 +133,7 @@ export default function ProjectDashboardPage() {
               </div>
               <h3 className="text-base font-semibold">تحليلات الذكاء الاصطناعي جاهزة للمشروع</h3>
               <p className="mt-1 text-xs text-muted-foreground max-w-md mx-auto">
-                تم ربط الداشبورد بنجاح بنظام المشروع. يمكنك الانتقال لصفحة رفع البيانات لرفع ملفك المرتبط بهذا المشروع.
+                قم برفع ملف بيانات (Excel أو CSV) من صفحة رفع البيانات وتأكد من اختيار اسم هذا المشروع لتظهر التحليلات الفورية وأرقام الملف هنا.
               </p>
               <Link
                 href="/upload"
