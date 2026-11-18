@@ -7,7 +7,7 @@ import { KpiCards } from '@/components/dashboard/kpi-cards'
 import { ChartsSection } from '@/components/dashboard/charts-section'
 import { InsightsPanel } from '@/components/dashboard/insights-actions'
 import { apiRequest } from '@/lib/api'
-import { Database, ArrowLeft, FileSpreadsheet } from 'lucide-react'
+import { Database, ArrowLeft, FileSpreadsheet, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 
 export default function ProjectDashboardPage() {
@@ -21,11 +21,11 @@ export default function ProjectDashboardPage() {
     async function fetchProjectData() {
       if (!projectId) return
       try {
-        // 1. Fetch project details
+        // 1. جلب تفاصيل المشروع
         const projRes = await apiRequest<any>(`/api/projects/${projectId}`)
         setProject(projRes)
 
-        // 2. Fetch datasets associated with this project to display its specific metrics
+        // 2. جلب الملفات والبيانات المرتبطة بهذا المشروع حصرياً
         const filesRes = await apiRequest<any[]>(`/api/projects/${projectId}/files`)
         if (Array.isArray(filesRes)) {
           setDatasets(filesRes)
@@ -44,15 +44,18 @@ export default function ProjectDashboardPage() {
     return (
       <DashboardShell>
         <div className="flex h-96 items-center justify-center">
-          <p className="text-sm text-muted-foreground animate-pulse">جاري تحميل بيانات المشروع المخصصة...</p>
+          <p className="text-sm text-muted-foreground animate-pulse">جاري تحميل الداشبورد الخاصة بالمشروع...</p>
         </div>
       </DashboardShell>
     )
   }
 
+  // أخذ أحدث ملف تم تحليله لهذا المشروع لعرض رؤى الذكاء الاصطناعي الخاصة به
+  const activeDataset = datasets[datasets.length - 1]
+
   return (
     <DashboardShell>
-      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 p-6">
         {/* Project Header Banner */}
         <div className="flex items-center justify-between rounded-2xl border border-border bg-card/40 p-5">
           <div className="flex items-center gap-3">
@@ -77,13 +80,18 @@ export default function ProjectDashboardPage() {
           </Link>
         </div>
 
-        {/* Project Files List Indicator */}
-        {datasets.length > 0 && (
-          <div className="flex items-center gap-2 rounded-xl border border-border bg-card/30 px-4 py-3 text-xs text-muted-foreground">
+        {/* Project Files Status */}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card/30 px-4 py-3 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
             <FileSpreadsheet className="h-4 w-4 text-primary" />
-            <span>الملفات المرتبطة بهذا المشروع: <strong>{datasets.length} ملفات محللة</strong></span>
+            <span>الملفات المرتبطة بهذا المشروع: <strong>{datasets.length} ملفات</strong></span>
           </div>
-        )}
+          {activeDataset && (
+            <span className="text-emerald-400 font-medium">
+              الصفوف المحللة: {activeDataset.rowCount || 'مفعل'} | الأعمدة: {activeDataset.columnCount || 'مفعل'}
+            </span>
+          )}
+        </div>
 
         {/* KPI Cards */}
         <KpiCards />
@@ -91,9 +99,21 @@ export default function ProjectDashboardPage() {
         {/* Charts Section */}
         <ChartsSection />
 
-        {/* AI Insights Specific Panel */}
+        {/* AI Insights Specific Panel for this Project */}
         <div className="grid grid-cols-1 gap-6">
-          <InsightsPanel insights={project?.insights || []} />
+          {activeDataset?.insights && activeDataset.insights.length > 0 ? (
+            <InsightsPanel insights={activeDataset.insights} />
+          ) : (
+            <div className="rounded-2xl border border-border bg-card/40 p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                <h3 className="text-base font-semibold">رؤى الذكاء الاصطناعي للمشروع</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                لا توجد رؤى مسجلة لهذا الملف بعد، قم برفع ملف بيانات جديد لهذا المشروع لتوليد التحليلات الفورية.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </DashboardShell>
