@@ -6,7 +6,7 @@ import { DashboardShell } from '@/components/dashboard/dashboard-shell'
 import { KpiCards } from '@/components/dashboard/kpi-cards'
 import { ChartsSection } from '@/components/dashboard/charts-section'
 import { InsightsPanel } from '@/components/dashboard/insights-actions'
-import { apiRequest } from '@/lib/api'
+import { apiRequest, getSession } from '@/lib/api'
 import { Database, ArrowLeft, FileSpreadsheet, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 
@@ -21,17 +21,28 @@ export default function ProjectDashboardPage() {
     async function fetchProjectData() {
       if (!projectId) return
       try {
-        // 1. جلب تفاصيل المشروع
-        const projRes = await apiRequest<any>(`/api/projects/${projectId}`)
-        setProject(projRes)
+        const session = getSession()
+        let wsId = session?.workspaceId
 
-        // 2. جلب الملفات والبيانات المرتبطة بهذا المشروع حصرياً
-        const filesRes = await apiRequest<any[]>(`/api/projects/${projectId}/files`)
-        if (Array.isArray(filesRes)) {
-          setDatasets(filesRes)
+        if (!wsId) {
+          const wsList = await apiRequest<any[]>('/api/workspaces')
+          const firstWs = wsList?.[0]
+          wsId = firstWs?.id || firstWs?.workspaceId
+        }
+
+        if (wsId) {
+          // 1. جلب تفاصيل المشروع بالمسار الصحيح للباك إند: /api/workspaces/{wsId}/projects/{projectId}
+          const projRes = await apiRequest<any>(`/api/workspaces/${wsId}/projects/${projectId}`)
+          setProject(projRes)
+
+          // 2. جلب الملفات أو الداتا ست المرتبطة
+          const filesRes = await apiRequest<any[]>(`/api/projects/${projectId}/files`).catch(() => [])
+          if (Array.isArray(filesRes)) {
+            setDatasets(filesRes)
+          }
         }
       } catch (error) {
-        console.error('Failed to load project analytics:', error)
+        console.error('Failed to load project details:', error)
       } finally {
         setLoading(false)
       }
@@ -44,13 +55,12 @@ export default function ProjectDashboardPage() {
     return (
       <DashboardShell>
         <div className="flex h-96 items-center justify-center">
-          <p className="text-sm text-muted-foreground animate-pulse">جاري تحميل الداشبورد الخاصة بالمشروع...</p>
+          <p className="text-sm text-muted-foreground animate-pulse">جاري تحميل الداشبورد المخصصة للمشروع...</p>
         </div>
       </DashboardShell>
     )
   }
 
-  // أخذ أحدث ملف تم تحليله لهذا المشروع لعرض رؤى الذكاء الاصطناعي الخاصة به
   const activeDataset = datasets[datasets.length - 1]
 
   return (
@@ -88,7 +98,7 @@ export default function ProjectDashboardPage() {
           </div>
           {activeDataset && (
             <span className="text-emerald-400 font-medium">
-              الصفوف المحللة: {activeDataset.rowCount || 'مفعل'} | الأعمدة: {activeDataset.columnCount || 'مفعل'}
+              الصفوف: {activeDataset.rowCount || 'مفعل'} | الأعمدة: {activeDataset.columnCount || 'مفعل'}
             </span>
           )}
         </div>
@@ -99,7 +109,7 @@ export default function ProjectDashboardPage() {
         {/* Charts Section */}
         <ChartsSection />
 
-        {/* AI Insights Specific Panel for this Project */}
+        {/* AI Insights Specific Panel */}
         <div className="grid grid-cols-1 gap-6">
           {activeDataset?.insights && activeDataset.insights.length > 0 ? (
             <InsightsPanel insights={activeDataset.insights} />
@@ -110,7 +120,7 @@ export default function ProjectDashboardPage() {
                 <h3 className="text-base font-semibold">رؤى الذكاء الاصطناعي للمشروع</h3>
               </div>
               <p className="text-xs text-muted-foreground">
-                لا توجد رؤى مسجلة لهذا الملف بعد، قم برفع ملف بيانات جديد لهذا المشروع لتوليد التحليلات الفورية.
+                تم ربط المشروع بنجاح. يمكنك رفع ملف بيانات جديد من صفحة "رفع البيانات" لتظهر التحليلات الفورية هنا.
               </p>
             </div>
           )}
