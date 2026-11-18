@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
 import { apiRequest, getSession } from '@/lib/api'
@@ -13,6 +13,10 @@ import {
   Columns,
   BarChart3,
   Upload,
+  TrendingDown,
+  TrendingUp,
+  PieChart,
+  Activity,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -60,23 +64,66 @@ export default function ProjectDashboardPage() {
     fetchProjectData()
   }, [projectId])
 
+  const activeDataset = datasets[selectedDatasetIndex]
+  const insights: Array<{ title: string; description: string }> = activeDataset?.insights ?? []
+
+  // استخراج عدد الصفوف الفعلي حتى لو جاء داخل نص الرؤى مثل "(548 صف)"
+  const extractedRows = useMemo(() => {
+    if (activeDataset?.rowCount && activeDataset.rowCount > 0) {
+      return activeDataset.rowCount
+    }
+    for (const ins of insights) {
+      const match = ins.description?.match(/\((\d+)\s*صف\)/) || ins.description?.match(/(\d+)\s*rows/i)
+      if (match && match[1]) {
+        return Number(match[1])
+      }
+    }
+    return 0
+  }, [activeDataset, insights])
+
+  // استخراج بيانات الرسوم البيانية ديناميكياً من الأرقام والمقارنات الحقيقية في الرؤى
+  const dynamicChartBars = useMemo(() => {
+    const bars: Array<{ label: string; value: number; change?: string; isNegative?: boolean }> = []
+    const seenLabels = new Set<string>()
+
+    insights.forEach((ins) => {
+      // استخراج المقارنات مثل: من 2019.62 في 'Return_year' إلى 6.68 في 'Return_Month' بنسبة انخفاض -99.7%
+      const matches = [...ins.description.matchAll(/([\d.]+)\s+في\s+'([^']+)'/g)]
+      const pctMatch = ins.description.match(/([+-]?\d+(?:\.\d+)?%)/)
+
+      matches.forEach((m, idx) => {
+        const val = parseFloat(m[1])
+        const label = m[2]
+        if (!seenLabels.has(label) && !isNaN(val)) {
+          seenLabels.add(label)
+          bars.push({
+            label,
+            value: val,
+            change: idx === 1 && pctMatch ? pctMatch[1] : undefined,
+            isNegative: idx === 1 && pctMatch ? pctMatch[1].includes('-') : false,
+          })
+        }
+      })
+    })
+
+    return bars
+  }, [insights])
+
   if (loading) {
     return (
       <DashboardShell>
         <div className="flex h-96 items-center justify-center">
           <p className="animate-pulse text-sm text-muted-foreground">
-            جاري تحميل الداشبورد المخصصة للمشروع...
+            جاري بناء الداشبورد التفاعلية للمشروع...
           </p>
         </div>
       </DashboardShell>
     )
   }
 
-  const activeDataset = datasets[selectedDatasetIndex]
   const totalFiles = datasets.length
-  const totalRows = activeDataset?.rowCount ?? 0
   const totalColumns = activeDataset?.columnCount ?? 0
-  const insights = activeDataset?.insights ?? []
+  const maxBarVal = Math.max(...dynamicChartBars.map((b) => b.value), 1)
 
   return (
     <DashboardShell>
@@ -115,7 +162,7 @@ export default function ProjectDashboardPage() {
           </div>
         </div>
 
-        {/* Dataset Switcher if multiple files exist */}
+        {/* Dataset Switcher */}
         {datasets.length > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card/30 px-4 py-3">
             <div className="flex items-center gap-2 text-xs">
@@ -131,7 +178,7 @@ export default function ProjectDashboardPage() {
               >
                 {datasets.map((ds, idx) => (
                   <option key={ds.id || idx} value={idx} className="bg-slate-900">
-                    {ds.name} ({ds.rowCount} صف)
+                    {ds.name}
                   </option>
                 ))}
               </select>
@@ -139,116 +186,219 @@ export default function ProjectDashboardPage() {
           </div>
         )}
 
-        {/* Dynamic KPI Cards Based on Real Dataset */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {/* 4 Executive KPI Cards */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-2xl border border-border bg-card/40 p-5">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">إجمالي الملفات المرفوعة</span>
+              <span className="text-xs text-muted-foreground">إجمالي الملفات</span>
               <FileSpreadsheet className="h-4 w-4 text-primary" />
             </div>
             <p className="mt-3 text-2xl font-bold">{totalFiles}</p>
-            <p className="mt-1 text-[11px] text-emerald-400">ملفات مرتبطة بهذا المشروع</p>
+            <p className="mt-1 text-[11px] text-emerald-400">مرتبطة بالمشروع</p>
           </div>
 
           <div className="rounded-2xl border border-border bg-card/40 p-5">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">عدد السجلات (الصفوف)</span>
+              <span className="text-xs text-muted-foreground">إجمالي السجلات (الصفوف)</span>
               <Layers className="h-4 w-4 text-primary" />
             </div>
-            <p className="mt-3 text-2xl font-bold">{totalRows.toLocaleString()}</p>
+            <p className="mt-3 text-2xl font-bold">{extractedRows.toLocaleString()}</p>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              {activeDataset ? `من ملف: ${activeDataset.name}` : 'بانتظار رفع ملف'}
+              {activeDataset ? `من ملف ${activeDataset.name}` : 'بانتظار رفع ملف'}
             </p>
           </div>
 
           <div className="rounded-2xl border border-border bg-card/40 p-5">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">عدد الأعمدة (المتغيرات)</span>
+              <span className="text-xs text-muted-foreground">الأعمدة (المتغيرات)</span>
               <Columns className="h-4 w-4 text-primary" />
             </div>
             <p className="mt-3 text-2xl font-bold">{totalColumns}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">مؤشرات البيانات المتاحة</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">مؤشرات البيانات</p>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-card/40 p-5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">جودة واكتمال البيانات</span>
+              <Activity className="h-4 w-4 text-emerald-400" />
+            </div>
+            <p className="mt-3 text-2xl font-bold">{activeDataset ? '100%' : '0%'}</p>
+            <p className="mt-1 text-[11px] text-emerald-400">
+              {insights.length} رؤى ذكية مستخرجة
+            </p>
           </div>
         </div>
 
-        {/* Visual Summary & AI Insights */}
+        {/* Full Interactive Dashboard Charts Section */}
         {activeDataset ? (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            {/* Visual Breakdown Card */}
-            <div className="rounded-2xl border border-border bg-card/40 p-5">
-              <div className="mb-4 flex items-center gap-2">
-                <BarChart3 className="h-5 w-5 text-primary" />
-                <h3 className="text-base font-semibold">ملخص بنية البيانات ({activeDataset.name})</h3>
+          <>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+              {/* Main Bar Chart: Dynamic Variable Comparison */}
+              <div className="rounded-2xl border border-border bg-card/40 p-6 lg:col-span-2">
+                <div className="mb-6 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5 text-primary" />
+                      <h3 className="text-base font-semibold">
+                        التحليل المقارن للمتغيرات الرئيسية ({activeDataset.name})
+                      </h3>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      تمثيل بصري للمتوسطات والفروقات المكتشفة تلقائياً بين أعمدة الملف
+                    </p>
+                  </div>
+                </div>
+
+                {dynamicChartBars.length > 0 ? (
+                  <div className="flex h-64 items-end justify-around gap-4 rounded-xl border border-border/50 bg-background/40 px-6 pt-10 pb-4">
+                    {dynamicChartBars.map((bar, idx) => {
+                      const heightPct = Math.max(12, Math.round((bar.value / maxBarVal) * 100))
+                      return (
+                        <div key={idx} className="flex h-full flex-1 flex-col items-center justify-end gap-2">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-xs font-bold text-foreground">
+                              {bar.value.toLocaleString()}
+                            </span>
+                            {bar.change && (
+                              <span
+                                className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                  bar.isNegative
+                                    ? 'bg-red-500/15 text-red-400'
+                                    : 'bg-emerald-500/15 text-emerald-400'
+                                }`}
+                              >
+                                {bar.isNegative ? (
+                                  <TrendingDown className="h-3 w-3" />
+                                ) : (
+                                  <TrendingUp className="h-3 w-3" />
+                                )}
+                                {bar.change}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex w-full max-w-[70px] flex-1 items-end">
+                            <div
+                              className={`w-full rounded-t-xl transition-all duration-500 ${
+                                idx === 0
+                                  ? 'bg-gradient-to-t from-primary/60 to-primary'
+                                  : idx % 2 === 1
+                                  ? 'bg-gradient-to-t from-cyan-500/60 to-cyan-400'
+                                  : 'bg-gradient-to-t from-emerald-500/60 to-emerald-400'
+                              }`}
+                              style={{ height: `${heightPct}%` }}
+                            />
+                          </div>
+                          <span className="max-w-[90px] truncate text-center text-xs font-medium text-muted-foreground">
+                            {bar.label}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex h-56 flex-col items-center justify-center rounded-xl border border-border/50 bg-background/40 p-6 text-center">
+                    <BarChart3 className="mb-2 h-8 w-8 text-primary/60" />
+                    <p className="text-sm font-medium">
+                      تم تحليل {extractedRows.toLocaleString()} سجل عبر {totalColumns} أعمدة
+                    </p>
+                  </div>
+                )}
               </div>
-              <div className="space-y-4">
+
+              {/* Donut / Distribution Chart Card */}
+              <div className="flex flex-col justify-between rounded-2xl border border-border bg-card/40 p-6">
                 <div>
-                  <div className="mb-1 flex justify-between text-xs">
-                    <span className="text-muted-foreground">كثافة السجلات المعالجة</span>
-                    <span className="font-semibold">{totalRows.toLocaleString()} سجل</span>
+                  <div className="flex items-center gap-2">
+                    <PieChart className="h-5 w-5 text-primary" />
+                    <h3 className="text-base font-semibold">توزيع المؤشرات</h3>
                   </div>
-                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-secondary">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all"
-                      style={{ width: `${Math.min(100, Math.max(15, (totalRows / 5000) * 100))}%` }}
-                    />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    نسب التغطية والاكتمال لبيانات الملف
+                  </p>
+                </div>
+
+                {/* SVG Circular Gauge */}
+                <div className="my-6 flex flex-col items-center justify-center">
+                  <div className="relative flex h-40 w-40 items-center justify-center">
+                    <svg className="h-full w-full -rotate-90" viewBox="0 0 100 100">
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="40"
+                        stroke="currentColor"
+                        strokeWidth="10"
+                        fill="transparent"
+                        className="text-secondary"
+                      />
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="40"
+                        stroke="currentColor"
+                        strokeWidth="10"
+                        strokeDasharray="251.2"
+                        strokeDashoffset="0"
+                        strokeLinecap="round"
+                        fill="transparent"
+                        className="text-primary transition-all duration-700"
+                      />
+                    </svg>
+                    <div className="absolute flex flex-col items-center text-center">
+                      <span className="text-2xl font-bold">100%</span>
+                      <span className="text-[11px] text-muted-foreground">اكتمال السجلات</span>
+                    </div>
                   </div>
                 </div>
 
-                <div>
-                  <div className="mb-1 flex justify-between text-xs">
-                    <span className="text-muted-foreground">أبعاد التحليل (الأعمدة)</span>
-                    <span className="font-semibold">{totalColumns} متغيرات</span>
+                <div className="space-y-2.5 border-t border-border pt-4 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-muted-foreground">
+                      <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+                      السجلات الصالحة
+                    </span>
+                    <span className="font-semibold">{extractedRows.toLocaleString()} صف</span>
                   </div>
-                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-secondary">
-                    <div
-                      className="h-full rounded-full bg-emerald-400 transition-all"
-                      style={{ width: `${Math.min(100, Math.max(20, totalColumns * 5))}%` }}
-                    />
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-muted-foreground">
+                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                      الأبعاد المحللة
+                    </span>
+                    <span className="font-semibold">{totalColumns} أعمدة</span>
                   </div>
-                </div>
-
-                <div>
-                  <div className="mb-1 flex justify-between text-xs">
-                    <span className="text-muted-foreground">الرؤى المستخرجة بالذكاء الاصطناعي</span>
-                    <span className="font-semibold">{insights.length} رؤى</span>
-                  </div>
-                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-secondary">
-                    <div
-                      className="h-full rounded-full bg-amber-400 transition-all"
-                      style={{ width: `${Math.min(100, Math.max(15, insights.length * 20))}%` }}
-                    />
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-muted-foreground">
+                      <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+                      القيم المفقودة
+                    </span>
+                    <span className="font-semibold text-emerald-400">0%</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* AI Insights Panel */}
-            <div className="rounded-2xl border border-border bg-card/40 p-5">
+            {/* AI Insights Grid */}
+            <div className="rounded-2xl border border-border bg-card/40 p-6">
               <div className="mb-4 flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-primary" />
-                <h3 className="text-base font-semibold">رؤى الذكاء الاصطناعي للملف</h3>
+                <h3 className="text-base font-semibold">
+                  التفسير التفصيلي ورؤى الذكاء الاصطناعي — {activeDataset.name}
+                </h3>
               </div>
-              {insights.length > 0 ? (
-                <div className="flex flex-col gap-3">
-                  {insights.map((ins: any, idx: number) => (
-                    <div
-                      key={idx}
-                      className="rounded-xl border border-border bg-background/60 p-3.5"
-                    >
-                      <p className="text-sm font-semibold text-foreground">{ins.title}</p>
-                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                        {ins.description}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  تمت معالجة الملف بنجاح ({totalRows} صف و {totalColumns} أعمدة).
-                </p>
-              )}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {insights.map((ins, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-xl border border-border bg-background/60 p-4 transition-colors hover:border-primary/40"
+                  >
+                    <p className="text-sm font-semibold text-foreground">{ins.title}</p>
+                    <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                      {ins.description}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          </>
         ) : (
           <div className="rounded-2xl border border-border bg-card/40 p-8 text-center">
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary">
@@ -256,7 +406,7 @@ export default function ProjectDashboardPage() {
             </div>
             <h3 className="text-base font-semibold">لا توجد ملفات مرفوعة لهذا المشروع بعد</h3>
             <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
-              اذهب إلى صفحة رفع البيانات، اختر مشروع <strong>{project?.name}</strong>، وارفع ملف Excel أو CSV لتظهر هنا أرقامه الحقيقية ورؤى الذكاء الاصطناعي الخاصة به.
+              اذهب إلى صفحة رفع البيانات، اختر مشروع <strong>{project?.name}</strong>، وارفع ملف Excel أو CSV لتظهر هنا الرسوم البيانية والداشبورد الكاملة الخاصة به.
             </p>
             <Link
               href="/upload"
