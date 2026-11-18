@@ -34,19 +34,20 @@ export function Sidebar({
   const [active, setActive] = useState(activeItem)
   const { t } = useTranslation()
 
+  // Updated navigation with correct specific routes for Projects and AI Reports
   const nav = [
     { id: 'overview', label: t.overview, href: '/dashboard', icon: LayoutDashboard },
-    { id: 'analytics', label: t.analytics, href: '/dashboard', icon: BarChart3 },
-    { id: 'projects', label: t.projects, href: '/dashboard', icon: FolderKanban, badge: '8' },
+    { id: 'analytics', label: t.analytics, href: '/analytics', icon: BarChart3 },
+    { id: 'projects', label: t.projects, href: '/projects', icon: FolderKanban, badge: '8' },
     { id: 'dataFiles', label: t.dataFiles, href: '/upload', icon: FileSpreadsheet },
-    { id: 'aiReports', label: t.aiReports, href: '/upload', icon: Sparkles, badge: 'AI' },
-    { id: 'team', label: t.team, href: '/dashboard', icon: Users },
+    { id: 'aiReports', label: t.aiReports, href: '/reports', icon: Sparkles, badge: 'AI' },
+    { id: 'team', label: t.team, href: '/team', icon: Users },
   ]
 
   return (
     <div className="flex h-full flex-col gap-1 bg-card/40 p-4">
       <div className="mb-2 flex items-center justify-between px-2">
-        <Link href="/" className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <Sparkles className="h-4 w-4" />
           </span>
