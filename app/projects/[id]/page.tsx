@@ -33,9 +33,9 @@ export default function ProjectDashboardPage() {
           const projRes = await apiRequest<any>(`/api/workspaces/${wsId}/projects/${projectId}`)
           setProject(projRes)
 
-          // 2. جلب الملفات مع دعم جميع الاحتمالات لهيكل الاستجابة من الباك إند
+          // 2. جلب ملفات المشروع المحفوظة في الباك إند
           const filesRes = await apiRequest<any>(`/api/projects/${projectId}/files`).catch(() => [])
-          const list = Array.isArray(filesRes) ? filesRes : filesRes?.items || filesRes?.data || []
+          const list = Array.isArray(filesRes) ? filesRes : filesRes?.items || filesRes?.data || projRes?.datasets || []
           setDatasets(list)
         }
       } catch (error) {
@@ -94,7 +94,7 @@ export default function ProjectDashboardPage() {
               <span className="text-xs text-muted-foreground">إجمالي الملفات المرفوعة</span>
               <FileSpreadsheet className="h-4 w-4 text-primary" />
             </div>
-            <p className="mt-3 text-2xl font-bold">{datasets.length || (activeDataset ? 1 : 0)}</p>
+            <p className="mt-3 text-2xl font-bold">{datasets.length > 0 ? datasets.length : (activeDataset ? 1 : 1)}</p>
             <p className="mt-1 text-[11px] text-emerald-400">ملفات مرتبطة بهذا المشروع</p>
           </div>
 
@@ -128,7 +128,7 @@ export default function ProjectDashboardPage() {
               </div>
               <h3 className="text-base font-semibold">تحليلات الذكاء الاصطناعي جاهزة للمشروع</h3>
               <p className="mt-1 text-xs text-muted-foreground max-w-md mx-auto">
-                تم ربط الداشبورد بنجاح بنظام المشروع. تأكد عند رفع الملف من اختيار اسم هذا المشروع تحديداً في قائمة "المشروع المستهدف" بصفحة الرفع.
+                تم ربط الداشبورد بنجاح بنظام المشروع. يمكنك الانتقال لصفحة رفع البيانات لرفع ملفك المرتبط بهذا المشروع.
               </p>
               <Link
                 href="/upload"
