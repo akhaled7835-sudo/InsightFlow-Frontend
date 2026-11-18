@@ -2,15 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { FolderKanban, FileSpreadsheet, Plus, ArrowRight, Sparkles, Clock, Database } from 'lucide-react'
+import { FolderKanban, Plus, ArrowRight, Clock, Database } from 'lucide-react'
+import { apiRequest, getSession } from '@/lib/api'
 
 interface ProjectItem {
   id: string
   name: string
   description?: string
   createdAt?: string
-  datasetsCount?: number
-  reportsCount?: number
 }
 
 export default function ProjectsPage() {
@@ -20,17 +19,32 @@ export default function ProjectsPage() {
   useEffect(() => {
     async function fetchProjects() {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://insightflow.runasp.net/api'
-        const res = await fetch(`${apiUrl}/projects`, {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        })
+        const session = getSession()
+        let wsId = session?.workspaceId
 
-        if (res.ok) {
-          const data = await res.json()
-          // Adjust based on your API response structure (e.g., data or direct array)
-          setProjects(Array.isArray(data) ? data : data.items || [])
+        // 1. If no workspace in session, fetch workspaces list first
+        if (!wsId) {
+          const wsList = await apiRequest<any[]>('/api/workspaces')
+          const firstWs = wsList?.[0]
+          wsId = firstWs?.id || firstWs?.workspaceId
+        }
+
+        if (wsId) {
+          // 2. Fetch projects using the correct workspace endpoint
+          const projList = await apiRequest<any[]>(`/api/workspaces/${wsId}/projects`)
+          if (Array.isArray(projList)) {
+            const mapped = projList.map((p) => ({
+              id: p.id || p.projectId,
+              name: p.name || 'Untitled Project',
+              description: p.description,
+              createdAt: p.createdAt,
+            }))
+            setProjects(mapped)
+          }
+        } else {
+          // Fallback to direct /projects if workspace is not mandatory
+          const res = await apiRequest<any>('/api/projects')
+          setProjects(Array.isArray(res) ? res : res?.items || [])
         }
       } catch (error) {
         console.error('Failed to load projects:', error)
