@@ -169,6 +169,30 @@ export default function UploadPage() {
 
           const insightsList = insightsRes?.insights || insightsRes?.Insights || []
 
+          const newDatasetRecord = {
+            id: datasetId,
+            fileId,
+            name: f.name,
+            size: f.size,
+            type: ext(f.name),
+            rowCount: rows ?? 0,
+            columnCount: columns ?? 0,
+            insights: insightsList,
+            uploadedAt: new Date().toISOString(),
+          }
+
+          try {
+            const storageKey = `insightflow_project_files_${selectedProjectId}`
+            const existing = JSON.parse(localStorage.getItem(storageKey) || '[]')
+            const updated = [
+              ...existing.filter((item: any) => item.id !== datasetId),
+              newDatasetRecord,
+            ]
+            localStorage.setItem(storageKey, JSON.stringify(updated))
+          } catch (e) {
+            console.error('Failed to cache project dataset:', e)
+          }
+
           setFiles((prev) =>
             prev.map((x) =>
               x.id === itemId
