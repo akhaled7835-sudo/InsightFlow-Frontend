@@ -7,37 +7,44 @@ import { KpiCards } from '@/components/dashboard/kpi-cards'
 import { ChartsSection } from '@/components/dashboard/charts-section'
 import { InsightsPanel } from '@/components/dashboard/insights-actions'
 import { apiRequest } from '@/lib/api'
-import { Database, FileText, ArrowLeft } from 'lucide-react'
+import { Database, ArrowLeft, FileSpreadsheet } from 'lucide-react'
 import Link from 'next/link'
 
 export default function ProjectDashboardPage() {
   const params = useParams()
   const projectId = params?.id as string
-  const [projectData, setProjectData] = useState<any>(null)
+  const [project, setProject] = useState<any>(null)
+  const [datasets, setDatasets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function fetchProjectDetails() {
+    async function fetchProjectData() {
       if (!projectId) return
       try {
-        // Fetch project details and datasets/reports from .NET backend
-        const res = await apiRequest<any>(`/api/projects/${projectId}`)
-        setProjectData(res)
+        // 1. Fetch project details
+        const projRes = await apiRequest<any>(`/api/projects/${projectId}`)
+        setProject(projRes)
+
+        // 2. Fetch datasets associated with this project to display its specific metrics
+        const filesRes = await apiRequest<any[]>(`/api/projects/${projectId}/files`)
+        if (Array.isArray(filesRes)) {
+          setDatasets(filesRes)
+        }
       } catch (error) {
-        console.error('Failed to load project details:', error)
+        console.error('Failed to load project analytics:', error)
       } finally {
         setLoading(false)
       }
     }
 
-    fetchProjectDetails()
+    fetchProjectData()
   }, [projectId])
 
   if (loading) {
     return (
       <DashboardShell>
         <div className="flex h-96 items-center justify-center">
-          <p className="text-sm text-muted-foreground animate-pulse">جاري تحميل الداشبورد للمشروع...</p>
+          <p className="text-sm text-muted-foreground animate-pulse">جاري تحميل بيانات المشروع المخصصة...</p>
         </div>
       </DashboardShell>
     )
@@ -54,10 +61,10 @@ export default function ProjectDashboardPage() {
             </span>
             <div>
               <h1 className="text-xl font-bold tracking-tight">
-                {projectData?.name || `مشروع تحليل البيانات (#${projectId.slice(0, 8)})`}
+                {project?.name || `مشروع تحليل البيانات`}
               </h1>
               <p className="text-xs text-muted-foreground">
-                {projectData?.description || 'داشبورد تحليل الملفات ورؤى الذكاء الاصطناعي التنفيذية.'}
+                {project?.description || 'الداشبورد التنفيذية المخصصة لهذا المشروع وتحليلاته.'}
               </p>
             </div>
           </div>
@@ -70,15 +77,23 @@ export default function ProjectDashboardPage() {
           </Link>
         </div>
 
-        {/* Live KPI Cards */}
+        {/* Project Files List Indicator */}
+        {datasets.length > 0 && (
+          <div className="flex items-center gap-2 rounded-xl border border-border bg-card/30 px-4 py-3 text-xs text-muted-foreground">
+            <FileSpreadsheet className="h-4 w-4 text-primary" />
+            <span>الملفات المرتبطة بهذا المشروع: <strong>{datasets.length} ملفات محللة</strong></span>
+          </div>
+        )}
+
+        {/* KPI Cards */}
         <KpiCards />
 
         {/* Charts Section */}
         <ChartsSection />
 
-        {/* AI Insights Specific to Project */}
+        {/* AI Insights Specific Panel */}
         <div className="grid grid-cols-1 gap-6">
-          <InsightsPanel insights={projectData?.insights || []} />
+          <InsightsPanel insights={project?.insights || []} />
         </div>
       </div>
     </DashboardShell>
