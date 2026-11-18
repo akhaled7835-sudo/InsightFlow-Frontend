@@ -3,11 +3,9 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
-import { KpiCards } from '@/components/dashboard/kpi-cards'
-import { ChartsSection } from '@/components/dashboard/charts-section'
 import { InsightsPanel } from '@/components/dashboard/insights-actions'
 import { apiRequest, getSession } from '@/lib/api'
-import { Database, ArrowLeft, FileSpreadsheet, Sparkles } from 'lucide-react'
+import { Database, ArrowLeft, FileSpreadsheet, Sparkles, Layers, Columns, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 
 export default function ProjectDashboardPage() {
@@ -31,11 +29,11 @@ export default function ProjectDashboardPage() {
         }
 
         if (wsId) {
-          // 1. جلب تفاصيل المشروع بالمسار الصحيح للباك إند: /api/workspaces/{wsId}/projects/{projectId}
+          // 1. جلب تفاصيل المشروع
           const projRes = await apiRequest<any>(`/api/workspaces/${wsId}/projects/${projectId}`)
           setProject(projRes)
 
-          // 2. جلب الملفات أو الداتا ست المرتبطة
+          // 2. جلب ملفات المشروع الحقيقية
           const filesRes = await apiRequest<any[]>(`/api/projects/${projectId}/files`).catch(() => [])
           if (Array.isArray(filesRes)) {
             setDatasets(filesRes)
@@ -61,6 +59,7 @@ export default function ProjectDashboardPage() {
     )
   }
 
+  // أحدث ملف تم رفعه وتحليله لهذا المشروع
   const activeDataset = datasets[datasets.length - 1]
 
   return (
@@ -90,38 +89,55 @@ export default function ProjectDashboardPage() {
           </Link>
         </div>
 
-        {/* Project Files Status */}
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card/30 px-4 py-3 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <FileSpreadsheet className="h-4 w-4 text-primary" />
-            <span>الملفات المرتبطة بهذا المشروع: <strong>{datasets.length} ملفات</strong></span>
+        {/* Dynamic KPI Cards Based on Real Dataset */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-card/40 p-5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">إجمالي الملفات المرفوعة</span>
+              <FileSpreadsheet className="h-4 w-4 text-primary" />
+            </div>
+            <p className="mt-3 text-2xl font-bold">{datasets.length}</p>
+            <p className="mt-1 text-[11px] text-emerald-400">ملفات مرتبطة بهذا المشروع</p>
           </div>
-          {activeDataset && (
-            <span className="text-emerald-400 font-medium">
-              الصفوف: {activeDataset.rowCount || 'مفعل'} | الأعمدة: {activeDataset.columnCount || 'مفعل'}
-            </span>
-          )}
+
+          <div className="rounded-2xl border border-border bg-card/40 p-5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">عدد السجلات (الصفوف)</span>
+              <Layers className="h-4 w-4 text-primary" />
+            </div>
+            <p className="mt-3 text-2xl font-bold">{activeDataset?.rowCount || 0}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">من آخر ملف تم تحليله</p>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-card/40 p-5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">عدد الأعمدة (المتغيرات)</span>
+              <Columns className="h-4 w-4 text-primary" />
+            </div>
+            <p className="mt-3 text-2xl font-bold">{activeDataset?.columnCount || 0}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">مؤشرات البيانات المتاحة</p>
+          </div>
         </div>
 
-        {/* KPI Cards */}
-        <KpiCards />
-
-        {/* Charts Section */}
-        <ChartsSection />
-
-        {/* AI Insights Specific Panel */}
+        {/* AI Insights Specific Panel for this Project */}
         <div className="grid grid-cols-1 gap-6">
           {activeDataset?.insights && activeDataset.insights.length > 0 ? (
             <InsightsPanel insights={activeDataset.insights} />
           ) : (
-            <div className="rounded-2xl border border-border bg-card/40 p-5">
-              <div className="flex items-center gap-2 mb-2">
-                <Sparkles className="h-5 w-5 text-primary" />
-                <h3 className="text-base font-semibold">رؤى الذكاء الاصطناعي للمشروع</h3>
+            <div className="rounded-2xl border border-border bg-card/40 p-6 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary mb-3">
+                <Sparkles className="h-6 w-6" />
               </div>
-              <p className="text-xs text-muted-foreground">
-                تم ربط المشروع بنجاح. يمكنك رفع ملف بيانات جديد من صفحة "رفع البيانات" لتظهر التحليلات الفورية هنا.
+              <h3 className="text-base font-semibold">لا توجد ملفات مرفوعة أو رؤى مسجلة لهذا المشروع بعد</h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-md mx-auto">
+                هذا المشروع حالياً فارغ ولم تقم برفع ملف بيانات تحته. اذهب إلى صفحة "رفع البيانات" وارفع ملف Excel أو CSV تحت هذا المشروع لتتغير هذه الداشبورد فوراً وتعرض أرقامه ورؤاه الخاصة!
               </p>
+              <Link
+                href="/upload"
+                className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90"
+              >
+                رفع ملف لهذا المشروع الآن
+              </Link>
             </div>
           )}
         </div>
