@@ -385,7 +385,7 @@ export default function ProjectDashboardPage() {
               </select>
             )}
             <Link
-              href="/reports"
+              href={`/reports?projectId=${projectId}`}
               className="inline-flex items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-3.5 py-2 text-xs font-medium text-primary hover:bg-primary/20"
             >
               <FileText className="h-3.5 w-3.5" />
