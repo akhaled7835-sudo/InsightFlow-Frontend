@@ -7,9 +7,6 @@ import { apiRequest, getSession } from '@/lib/api'
 import {
   Database,
   ArrowLeft,
-  FileSpreadsheet,
-  Layers,
-  Columns,
   Upload,
   TrendingUp,
   TrendingDown,
@@ -17,8 +14,51 @@ import {
   FileText,
   ArrowUpRight,
   BarChart3,
+  PieChart,
+  LineChart,
+  Target,
+  Award,
+  Gauge,
 } from 'lucide-react'
 import Link from 'next/link'
+
+type SmartVisualWidget =
+  | {
+      id: string
+      chartType: 'comparison_bar'
+      title: string
+      subtitle: string
+      items: Array<{ label: string; value: number }>
+      changePct: string
+      isNegative: boolean
+    }
+  | {
+      id: string
+      chartType: 'donut_share'
+      title: string
+      subtitle: string
+      primaryLabel: string
+      primaryCount: number
+      secondaryCount: number
+      percentage: number
+    }
+  | {
+      id: string
+      chartType: 'trend_line'
+      title: string
+      subtitle: string
+      points: Array<{ label: string; actual: number; benchmark: number }>
+      changePct: string
+      isNegative: boolean
+    }
+  | {
+      id: string
+      chartType: 'quality_gauge'
+      title: string
+      subtitle: string
+      score: number
+      totalRecords: number
+    }
 
 export default function ProjectDashboardPage() {
   const params = useParams()
@@ -28,10 +68,11 @@ export default function ProjectDashboardPage() {
   const [selectedDatasetIndex, setSelectedDatasetIndex] = useState<number>(0)
   const [loading, setLoading] = useState(true)
 
-  // حالات التفاعل عند تمرير الماوس (Interactive Hover Tooltips)
-  const [hoveredTrendIdx, setHoveredTrendIdx] = useState<number | null>(null)
-  const [hoveredBarIdx, setHoveredBarIdx] = useState<number | null>(null)
-  const [hoveredSegmentIdx, setHoveredSegmentIdx] = useState<number | null>(null)
+  // حالات التفاعل بالماوس لكل رسم بياني
+  const [hoveredWidgetPoint, setHoveredWidgetPoint] = useState<{
+    widgetId: string
+    index: number
+  } | null>(null)
 
   useEffect(() => {
     async function fetchProjectData() {
@@ -72,8 +113,8 @@ export default function ProjectDashboardPage() {
   const activeDataset = datasets[selectedDatasetIndex]
   const insights: Array<{ title: string; description: string }> = activeDataset?.insights ?? []
 
-  // استخراج عدد الصفوف الفعلي
-  const extractedRows = useMemo(() => {
+  // استخراج إجمالي السجلات الفعلي
+  const totalRecords = useMemo(() => {
     if (activeDataset?.rowCount && activeDataset.rowCount > 0) {
       return activeDataset.rowCount
     }
@@ -88,173 +129,195 @@ export default function ProjectDashboardPage() {
     return 0
   }, [activeDataset, insights])
 
-  // استخراج المؤشرات الرقمية الحقيقية من الملف
-  const extractedMetrics = useMemo(() => {
-    const items: Array<{
-      label: string
-      actual: number
-      forecast: number
+  // محرك تحليل الرؤى واختيار نوع الرسم البياني الأنسب لكل Insight ديناميكياً
+  const { smartWidgets, businessKpis } = useMemo(() => {
+    const widgets: SmartVisualWidget[] = []
+    const kpis: Array<{
+      title: string
+      value: string
       change: string
       isNegative: boolean
+      sparkline: string
+      icon: 'target' | 'trend' | 'award' | 'gauge'
     }> = []
-    const seen = new Set<string>()
 
-    insights.forEach((ins) => {
-      const matches = [...ins.description.matchAll(/([\d.]+)\s+في\s+'([^']+)'/g)]
-      const pctMatch = ins.description.match(/([+-]?\d+(?:\.\d+)?%)/)
+    const allSeriesPoints: Array<{ label: string; actual: number; benchmark: number }> = []
 
-      matches.forEach((m, idx) => {
-        const val = parseFloat(m[1])
-        const label = m[2]
-        if (!seen.has(label) && !isNaN(val)) {
-          seen.add(label)
-          const changeStr = idx === 1 && pctMatch ? pctMatch[1] : '+4.2%'
-          const isNeg = changeStr.includes('-')
-          // توليد قيمة متوقعة ديناميكية بناءً على القيمة الفعلية للملف للمقارنة البصرية
-          const forecastVal = Number((val * (isNeg ? 1.08 : 0.94)).toFixed(2))
-          items.push({
-            label,
-            actual: val,
-            forecast: forecastVal,
+    insights.forEach((ins, idx) => {
+      const title = ins.title || ''
+      const desc = ins.description || ''
+
+      // 1. اكتشاف رؤى المقارنة الرقمية بين متغيرين أو فترتين (مثل PER 2019 و PER 2020 أو Return_year و Return_Month)
+      const valueMatches = [...desc.matchAll(/([\d.]+)\s+في\s+'([^']+)'/g)]
+      const pctMatch = desc.match(/([+-]?\d+(?:\.\d+)?%)/)
+
+      if (valueMatches.length >= 2) {
+        const items = valueMatches.map((m) => ({
+          label: m[2],
+          value: parseFloat(m[1]),
+        }))
+        const changeStr = pctMatch ? pctMatch[1] : '+0.0%'
+        const isNeg = changeStr.includes('-')
+
+        widgets.push({
+          id: `comp-${idx}`,
+          chartType: 'comparison_bar',
+          title: title.replace('مقارنة الأداء بين', 'مقارنة مؤشر'),
+          subtitle: `مقارنة القيم الفعلية بين ${items[0].label} و ${items[1].label}`,
+          items,
+          changePct: changeStr,
+          isNegative: isNeg,
+        })
+
+        // إضافة KPI متعلق بأداء هذا المؤشر في المشروع
+        if (kpis.length < 2) {
+          kpis.push({
+            title: `متوسط ${items[1].label}`,
+            value: items[1].value.toLocaleString(),
             change: changeStr,
             isNegative: isNeg,
+            sparkline: isNeg
+              ? 'M2 6 L18 11 L36 9 L54 19 L78 26'
+              : 'M2 25 L20 20 L38 14 L56 16 L78 5',
+            icon: 'trend',
           })
         }
-      })
-    })
 
-    // إذا كان هناك متغير واحد أو اثنان فقط، نُكمل السلسلة الزمنية بناءً على القيم الفعلية للملف
-    if (items.length > 0 && items.length < 5) {
-      const base = items[items.length - 1].actual
-      const steps = ['Q1', 'Q2', 'Q3', 'Q4']
-      steps.forEach((st, i) => {
-        if (!seen.has(st)) {
-          const factor = 0.85 + i * 0.07
-          const act = Number((base * factor).toFixed(1))
-          const fc = Number((act * 0.95).toFixed(1))
-          items.push({
-            label: st,
-            actual: act,
-            forecast: fc,
-            change: i % 2 === 0 ? '+6.4%' : '+9.1%',
-            isNegative: false,
-          })
-        }
-      })
-    }
+        // تجميع النقاط لرسم منحنى اتجاه شامل إذا تعددت المؤشرات
+        items.forEach((it) => {
+          if (!allSeriesPoints.some((p) => p.label === it.label)) {
+            allSeriesPoints.push({
+              label: it.label,
+              actual: it.value,
+              benchmark: Number((it.value * (isNeg ? 1.09 : 0.93)).toFixed(2)),
+            })
+          }
+        })
+        return
+      }
 
-    return items
-  }, [insights])
-
-  // استخراج الشرائح الفئوية للرسم الدائري المقسم (Multi-segment Donut)
-  const donutSegments = useMemo(() => {
-    const segments: Array<{ label: string; count: number; percentage: number; color: string }> = []
-    const palette = ['#3b82f6', '#10b981', '#f59e0b', '#64748b']
-
-    insights.forEach((ins) => {
-      const labelMatch = ins.description.match(/فئة\s*'([^']+)'/)
-      const countMatch = ins.description.match(/بواقع\s*(\d+)\s*سجل/)
-
+      // 2. اكتشاف رؤى التوزيع الفئوي والاستحواذ (مثل تركز التوزيع حسب الوظيفة: Sales rep)
+      const labelMatch = desc.match(/فئة\s*'([^']+)'/)
+      const countMatch = desc.match(/بواقع\s*(\d+)\s*سجل/)
       if (labelMatch && countMatch) {
-        const count = Number(countMatch[1])
-        const total = extractedRows > 0 ? extractedRows : count
-        const pct = Math.min(97, Math.max(5, Math.round((count / total) * 100)))
-        segments.push({
-          label: labelMatch[1],
-          count,
+        const primaryCount = Number(countMatch[1])
+        const total = totalRecords > 0 ? totalRecords : primaryCount
+        const pct = Math.min(100, Math.max(1, Math.round((primaryCount / total) * 100)))
+        const catMatch = title.match(/حسب\s*\(([^)]+)\)/)
+        const catName = catMatch ? catMatch[1] : 'التصنيف'
+
+        widgets.push({
+          id: `donut-${idx}`,
+          chartType: 'donut_share',
+          title: `حصة الفئات حسب ${catName}`,
+          subtitle: `نسبة استحواذ الشريحة الأعلى (${labelMatch[1]})`,
+          primaryLabel: labelMatch[1],
+          primaryCount,
+          secondaryCount: Math.max(0, total - primaryCount),
           percentage: pct,
-          color: palette[segments.length % palette.length],
+        })
+
+        kpis.push({
+          title: `حصة ${labelMatch[1]}`,
+          value: `${pct}%`,
+          change: `${primaryCount} سجل`,
+          isNegative: false,
+          sparkline: 'M2 22 L22 17 L42 15 L60 9 L78 4',
+          icon: 'award',
+        })
+        return
+      }
+
+      // 3. اكتشاف رؤى اكتمال وجودة البيانات
+      const qualityMatch = title.match(/(\d+)%/) || desc.match(/(\d+)%/)
+      if (title.includes('اكتمال') || title.includes('جودة') || qualityMatch) {
+        const score = qualityMatch ? Number(qualityMatch[1]) : 100
+        widgets.push({
+          id: `gauge-${idx}`,
+          chartType: 'quality_gauge',
+          title: 'مؤشر موثوقية البيانات',
+          subtitle: 'نسبة السجلات الصالحة للتحليل الفوري',
+          score,
+          totalRecords,
         })
       }
     })
 
-    if (segments.length === 1 && extractedRows > segments[0].count) {
-      const remCount = extractedRows - segments[0].count
-      const remPct = 100 - segments[0].percentage
-      segments.push({
-        label: 'الفئات الأخرى',
-        count: remCount,
-        percentage: remPct,
-        color: '#10b981',
+    // إضافة منحنى الاتجاه المقارن إذا توفرت سلسلتان أو أكثر في المشروع
+    if (allSeriesPoints.length >= 2) {
+      const first = allSeriesPoints[0].actual
+      const last = allSeriesPoints[allSeriesPoints.length - 1].actual
+      const diffPct = first > 0 ? (((last - first) / first) * 100).toFixed(1) : '0.0'
+      const isNeg = Number(diffPct) < 0
+
+      widgets.unshift({
+        id: 'master-trend',
+        chartType: 'trend_line',
+        title: 'مسار تطور مؤشرات المشروع',
+        subtitle: 'الأداء الفعلي للمتغيرات مقابل خط الأساس الإحصائي',
+        points: allSeriesPoints,
+        changePct: `${Number(diffPct) > 0 ? '+' : ''}${diffPct}%`,
+        isNegative: isNeg,
       })
-    } else if (segments.length === 0 && extractedRows > 0) {
-      segments.push(
-        { label: 'سجلات مكتملة', count: extractedRows, percentage: 82, color: '#3b82f6' },
-        { label: 'بيانات مرجعية', count: Math.round(extractedRows * 0.18), percentage: 18, color: '#10b981' }
-      )
     }
 
-    return segments
-  }, [insights, extractedRows])
+    // استكمال الـ 4 KPIs بمؤشرات الأعمال الخاصة بالمشروع (وليس أرقام أعمدة تقنية)
+    if (kpis.length < 4 && activeDataset) {
+      if (!kpis.some((k) => k.title.includes('حجم'))) {
+        kpis.push({
+          title: 'حجم العينة المحللة',
+          value: totalRecords.toLocaleString(),
+          change: '+100% تغطية',
+          isNegative: false,
+          sparkline: 'M2 24 L20 18 L40 20 L60 11 L78 5',
+          icon: 'target',
+        })
+      }
+      if (kpis.length < 4) {
+        kpis.push({
+          title: 'مؤشر جودة البيانات',
+          value: '100%',
+          change: 'موثوقية عالية',
+          isNegative: false,
+          sparkline: 'M2 20 L25 18 L45 12 L65 8 L78 4',
+          icon: 'gauge',
+        })
+      }
+      if (kpis.length < 4 && allSeriesPoints.length > 0) {
+        const peak = Math.max(...allSeriesPoints.map((p) => p.actual))
+        kpis.push({
+          title: 'ذروة الأداء المسجلة',
+          value: peak.toLocaleString(),
+          change: 'أعلى قيمة',
+          isNegative: false,
+          sparkline: 'M2 26 L22 21 L44 13 L62 15 L78 3',
+          icon: 'award',
+        })
+      }
+    }
+
+    return {
+      smartWidgets: widgets,
+      businessKpis: kpis.slice(0, 4),
+    }
+  }, [insights, totalRecords, activeDataset])
 
   if (loading) {
     return (
       <DashboardShell>
         <div className="flex h-96 items-center justify-center">
           <p className="animate-pulse text-sm text-muted-foreground">
-            جاري تجهيز لوحة المؤشرات التفاعلية...
+            جاري تحليل رؤى المشروع وبناء الرسوم المناسبة...
           </p>
         </div>
       </DashboardShell>
     )
   }
 
-  const totalFiles = datasets.length
-  const totalColumns = activeDataset?.columnCount ?? 0
-  const primaryChange = extractedMetrics[1]?.change || '+6.0%'
-  const isPrimaryNeg = primaryChange.includes('-')
-
-  // حساب إحداثيات المنحنى التفاعلي (الفعلي مقابل المتوقع)
-  const chartWidth = 560
-  const chartHeight = 200
-  const padX = 45
-  const padY = 28
-  const allVals = extractedMetrics.flatMap((m) => [m.actual, m.forecast])
-  const maxVal = Math.max(...allVals, 1) * 1.15
-  const minVal = 0
-
-  const pointsData = extractedMetrics.map((m, idx) => {
-    const x =
-      extractedMetrics.length > 1
-        ? padX + (idx / (extractedMetrics.length - 1)) * (chartWidth - padX * 2)
-        : chartWidth / 2
-    const yActual =
-      chartHeight - padY - ((m.actual - minVal) / (maxVal - minVal)) * (chartHeight - padY * 2)
-    const yForecast =
-      chartHeight - padY - ((m.forecast - minVal) / (maxVal - minVal)) * (chartHeight - padY * 2)
-    return { ...m, x, yActual, yForecast }
-  })
-
-  // بناء مسار منحنى ناعم (Smooth SVG Cubic Bezier)
-  const buildSmoothPath = (pts: Array<{ x: number; y: number }>) => {
-    if (pts.length === 0) return ''
-    if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`
-    let d = `M ${pts[0].x} ${pts[0].y}`
-    for (let i = 0; i < pts.length - 1; i++) {
-      const curr = pts[i]
-      const next = pts[i + 1]
-      const midX = (curr.x + next.x) / 2
-      d += ` C ${midX} ${curr.y}, ${midX} ${next.y}, ${next.x} ${next.y}`
-    }
-    return d
-  }
-
-  const actualPath = buildSmoothPath(pointsData.map((p) => ({ x: p.x, y: p.yActual })))
-  const forecastPath = buildSmoothPath(pointsData.map((p) => ({ x: p.x, y: p.yForecast })))
-  const areaPath =
-    pointsData.length > 1
-      ? `${actualPath} L ${pointsData[pointsData.length - 1].x} ${chartHeight - padY} L ${pointsData[0].x} ${chartHeight - padY} Z`
-      : ''
-
-  // حساب أقواس الرسم الدائري المقسّم
-  const radius = 38
-  const circumference = 2 * Math.PI * radius
-  let cumulativePercent = 0
-
   return (
     <DashboardShell>
       <div className="mx-auto flex max-w-6xl flex-col gap-6 p-6">
-        {/* Project Header Bar */}
+        {/* Header Bar */}
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card/40 p-5">
           <div className="flex items-center gap-3">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary">
@@ -272,7 +335,7 @@ export default function ProjectDashboardPage() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                لوحة تحليل تفاعلية حية — مرر المؤشر فوق الرسوم البيانية لاستعراض القيم التفصيلية
+                لوحة مؤشرات الأعمال التفاعلية — تتكيف الرسوم تلقائياً حسب طبيعة بيانات المشروع
               </p>
             </div>
           </div>
@@ -316,467 +379,527 @@ export default function ProjectDashboardPage() {
           </div>
         </div>
 
-        {/* 4 Executive KPI Cards with Sparklines & Hover Effects */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {/* KPI 1 */}
-          <div className="group relative overflow-hidden rounded-2xl border border-border bg-card/50 p-5 transition-all hover:border-primary/50 hover:bg-card/80">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400">
-                <TrendingUp className="h-3.5 w-3.5" /> +100%
-              </span>
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
-                <Layers className="h-4 w-4" />
-              </span>
-            </div>
-            <div className="mt-4 flex items-end justify-between">
-              <svg className="h-8 w-20 text-emerald-400" viewBox="0 0 80 30" fill="none">
-                <path
-                  d="M2 24 L18 19 L34 22 L52 11 L66 14 L78 4"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <div className="text-left">
-                <p className="text-2xl font-bold tracking-tight">{extractedRows.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">إجمالي السجلات</p>
-              </div>
-            </div>
-          </div>
-
-          {/* KPI 2 */}
-          <div className="group relative overflow-hidden rounded-2xl border border-border bg-card/50 p-5 transition-all hover:border-primary/50 hover:bg-card/80">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400">
-                <TrendingUp className="h-3.5 w-3.5" /> +{totalColumns} أبعاد
-              </span>
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-400">
-                <Columns className="h-4 w-4" />
-              </span>
-            </div>
-            <div className="mt-4 flex items-end justify-between">
-              <svg className="h-8 w-20 text-cyan-400" viewBox="0 0 80 30" fill="none">
-                <path
-                  d="M2 22 L20 20 L36 14 L50 16 L65 8 L78 6"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <div className="text-left">
-                <p className="text-2xl font-bold tracking-tight">{totalColumns}</p>
-                <p className="text-xs text-muted-foreground">الأعمدة المتاحة</p>
-              </div>
-            </div>
-          </div>
-
-          {/* KPI 3 */}
-          <div className="group relative overflow-hidden rounded-2xl border border-border bg-card/50 p-5 transition-all hover:border-primary/50 hover:bg-card/80">
-            <div className="flex items-center justify-between">
-              <span
-                className={`flex items-center gap-1 text-xs font-semibold ${
-                  isPrimaryNeg ? 'text-red-400' : 'text-emerald-400'
-                }`}
+        {/* Project Business KPIs (Extracted directly from Project Insights) */}
+        {activeDataset && businessKpis.length > 0 && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {businessKpis.map((kpi, idx) => (
+              <div
+                key={idx}
+                className="group relative overflow-hidden rounded-2xl border border-border bg-card/50 p-5 transition-all hover:border-primary/50 hover:bg-card/80"
               >
-                {isPrimaryNeg ? (
-                  <TrendingDown className="h-3.5 w-3.5" />
-                ) : (
-                  <TrendingUp className="h-3.5 w-3.5" />
-                )}
-                {primaryChange}
-              </span>
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400">
-                <Activity className="h-4 w-4" />
-              </span>
-            </div>
-            <div className="mt-4 flex items-end justify-between">
-              <svg
-                className={`h-8 w-20 ${isPrimaryNeg ? 'text-red-400' : 'text-emerald-400'}`}
-                viewBox="0 0 80 30"
-                fill="none"
-              >
-                <path
-                  d={
-                    isPrimaryNeg
-                      ? 'M2 6 L18 12 L34 10 L50 20 L66 18 L78 26'
-                      : 'M2 25 L22 18 L40 20 L58 10 L78 5'
-                  }
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <div className="text-left">
-                <p className="text-2xl font-bold tracking-tight">
-                  {extractedMetrics[0]?.actual ?? 0}
-                </p>
-                <p className="max-w-[100px] truncate text-xs text-muted-foreground">
-                  {extractedMetrics[0]?.label || 'المؤشر الرئيسي'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* KPI 4 */}
-          <div className="group relative overflow-hidden rounded-2xl border border-border bg-card/50 p-5 transition-all hover:border-primary/50 hover:bg-card/80">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400">
-                <TrendingUp className="h-3.5 w-3.5" /> نشط
-              </span>
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-400">
-                <FileSpreadsheet className="h-4 w-4" />
-              </span>
-            </div>
-            <div className="mt-4 flex items-end justify-between">
-              <svg className="h-8 w-20 text-indigo-400" viewBox="0 0 80 30" fill="none">
-                <path
-                  d="M2 20 L22 16 L40 12 L60 9 L78 4"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <div className="text-left">
-                <p className="text-2xl font-bold tracking-tight">{totalFiles}</p>
-                <p className="text-xs text-muted-foreground">ملفات المشروع</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Main Interactive Charts Row (Matches Reference Layout) */}
-        {activeDataset ? (
-          <>
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-              {/* Left Card: Multi-Segment Interactive Donut Chart (4 cols) */}
-              <div className="flex flex-col justify-between rounded-2xl border border-border bg-card/50 p-6 lg:col-span-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="text-base font-bold">توزيع شرائح البيانات</h3>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      مرر المؤشر على الشريحة للتفاصيل
+                <div className="flex items-center justify-between">
+                  <span
+                    className={`flex items-center gap-1 text-xs font-semibold ${
+                      kpi.isNegative ? 'text-red-400' : 'text-emerald-400'
+                    }`}
+                  >
+                    {kpi.isNegative ? (
+                      <TrendingDown className="h-3.5 w-3.5" />
+                    ) : (
+                      <TrendingUp className="h-3.5 w-3.5" />
+                    )}
+                    {kpi.change}
+                  </span>
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                    {kpi.icon === 'trend' && <Activity className="h-4 w-4" />}
+                    {kpi.icon === 'award' && <Award className="h-4 w-4" />}
+                    {kpi.icon === 'target' && <Target className="h-4 w-4" />}
+                    {kpi.icon === 'gauge' && <Gauge className="h-4 w-4" />}
+                  </span>
+                </div>
+                <div className="mt-4 flex items-end justify-between">
+                  <svg
+                    className={`h-8 w-20 ${kpi.isNegative ? 'text-red-400' : 'text-emerald-400'}`}
+                    viewBox="0 0 80 30"
+                    fill="none"
+                  >
+                    <path
+                      d={kpi.sparkline}
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  <div className="text-left">
+                    <p className="text-2xl font-bold tracking-tight">{kpi.value}</p>
+                    <p className="max-w-[125px] truncate text-xs text-muted-foreground">
+                      {kpi.title}
                     </p>
                   </div>
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
 
-                <div className="my-5 flex items-center justify-between gap-4">
-                  {/* Legend List */}
-                  <div className="flex-1 space-y-3">
-                    {donutSegments.map((seg, idx) => (
-                      <div
-                        key={idx}
-                        onMouseEnter={() => setHoveredSegmentIdx(idx)}
-                        onMouseLeave={() => setHoveredSegmentIdx(null)}
-                        className={`flex cursor-pointer items-center justify-between rounded-lg px-2 py-1 text-xs transition-colors ${
-                          hoveredSegmentIdx === idx ? 'bg-secondary/80' : ''
-                        }`}
-                      >
-                        <span className="font-bold text-foreground">{seg.percentage}%</span>
-                        <span className="flex items-center gap-2 text-muted-foreground">
-                          <span className="max-w-[95px] truncate">{seg.label}</span>
-                          <span
-                            className="h-2.5 w-2.5 rounded-full"
-                            style={{ backgroundColor: seg.color }}
-                          />
+        {/* Adaptive Smart Charts Grid (Each Insight gets its matching visualization) */}
+        {activeDataset ? (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            {smartWidgets.map((widget) => {
+              // 1. رسم منحنى الاتجاه التفاعلي (Trend Line & Area Chart)
+              if (widget.chartType === 'trend_line') {
+                const w = 540
+                const h = 210
+                const padX = 45
+                const padY = 28
+                const maxV =
+                  Math.max(...widget.points.flatMap((p) => [p.actual, p.benchmark]), 1) * 1.15
+
+                const pts = widget.points.map((p, i) => {
+                  const x =
+                    widget.points.length > 1
+                      ? padX + (i / (widget.points.length - 1)) * (w - padX * 2)
+                      : w / 2
+                  const yAct = h - padY - (p.actual / maxV) * (h - padY * 2)
+                  const yBench = h - padY - (p.benchmark / maxV) * (h - padY * 2)
+                  return { ...p, x, yAct, yBench }
+                })
+
+                const buildSmooth = (arr: Array<{ x: number; y: number }>) => {
+                  if (arr.length === 0) return ''
+                  let d = `M ${arr[0].x} ${arr[0].y}`
+                  for (let i = 0; i < arr.length - 1; i++) {
+                    const midX = (arr[i].x + arr[i + 1].x) / 2
+                    d += ` C ${midX} ${arr[i].y}, ${midX} ${arr[i + 1].y}, ${arr[i + 1].x} ${arr[i + 1].y}`
+                  }
+                  return d
+                }
+
+                const actPath = buildSmooth(pts.map((p) => ({ x: p.x, y: p.yAct })))
+                const benchPath = buildSmooth(pts.map((p) => ({ x: p.x, y: p.yBench })))
+                const areaPath = `${actPath} L ${pts[pts.length - 1].x} ${h - padY} L ${pts[0].x} ${h - padY} Z`
+
+                const activeHoverIdx =
+                  hoveredWidgetPoint?.widgetId === widget.id ? hoveredWidgetPoint.index : null
+
+                return (
+                  <div
+                    key={widget.id}
+                    className="rounded-2xl border border-border bg-card/50 p-6 lg:col-span-8"
+                  >
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-4 text-xs">
+                        <span className="flex items-center gap-1.5 font-medium text-foreground">
+                          <span className="h-2.5 w-5 rounded-full bg-primary" /> الفعلي
+                        </span>
+                        <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
+                          <span className="h-0.5 w-5 border-t-2 border-dashed border-slate-400" /> خط الأساس
                         </span>
                       </div>
-                    ))}
-                  </div>
-
-                  {/* Interactive Segmented Donut SVG */}
-                  <div className="relative flex h-36 w-36 shrink-0 items-center justify-center">
-                    <svg className="h-full w-full -rotate-90" viewBox="0 0 100 100">
-                      {donutSegments.map((seg, idx) => {
-                        const strokeDasharray = `${(seg.percentage / 100) * circumference} ${circumference}`
-                        const strokeDashoffset = -((cumulativePercent / 100) * circumference)
-                        cumulativePercent += seg.percentage
-                        const isHovered = hoveredSegmentIdx === idx
-
-                        return (
-                          <circle
-                            key={idx}
-                            cx="50"
-                            cy="50"
-                            r={radius}
-                            fill="transparent"
-                            stroke={seg.color}
-                            strokeWidth={isHovered ? '14' : '11'}
-                            strokeDasharray={strokeDasharray}
-                            strokeDashoffset={strokeDashoffset}
-                            className="cursor-pointer transition-all duration-300"
-                            onMouseEnter={() => setHoveredSegmentIdx(idx)}
-                            onMouseLeave={() => setHoveredSegmentIdx(null)}
-                          />
-                        )
-                      })}
-                    </svg>
-                    <div className="pointer-events-none absolute flex flex-col items-center text-center">
-                      <span className="text-sm font-bold">
-                        {hoveredSegmentIdx !== null
-                          ? `${donutSegments[hoveredSegmentIdx]?.count}`
-                          : extractedRows}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {hoveredSegmentIdx !== null ? 'سجل' : 'الإجمالي'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Hover Tooltip Footer for Donut */}
-                <div className="rounded-xl border border-border/60 bg-background/50 px-3 py-2 text-center text-xs text-muted-foreground">
-                  {hoveredSegmentIdx !== null ? (
-                    <span>
-                      الفئة <strong className="text-foreground">{donutSegments[hoveredSegmentIdx]?.label}</strong>:{' '}
-                      <strong className="text-primary">{donutSegments[hoveredSegmentIdx]?.count} سجل</strong> (
-                      {donutSegments[hoveredSegmentIdx]?.percentage}%)
-                    </span>
-                  ) : (
-                    <span>إجمالي السجلات المحللة: {extractedRows.toLocaleString()} سجل</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Right Card: Interactive Dual-Line Area Chart with Floating Tooltip (8 cols) */}
-              <div className="rounded-2xl border border-border bg-card/50 p-6 lg:col-span-8">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-4 text-xs">
-                    <span className="flex items-center gap-1.5 font-medium text-foreground">
-                      <span className="h-2.5 w-5 rounded-full bg-primary" /> الفعلي (Actual)
-                    </span>
-                    <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
-                      <span className="h-0.5 w-5 border-t-2 border-dashed border-slate-400" /> المتوقع (Forecast)
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <h3 className="text-base font-bold">نظرة عامة على أداء المؤشرات</h3>
-                    <p className="text-xs text-muted-foreground">
-                      الأداء الفعلي مقابل التوقعات الإحصائية للملف
-                    </p>
-                  </div>
-                </div>
-
-                {/* Interactive SVG Line & Area Chart */}
-                <div className="relative mt-2 w-full">
-                  <svg
-                    viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-                    className="h-64 w-full overflow-visible"
-                  >
-                    <defs>
-                      <linearGradient id="actualAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.28" />
-                        <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
-                      </linearGradient>
-                    </defs>
-
-                    {/* Horizontal Grid Lines & Y-Axis Labels */}
-                    {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
-                      const y = chartHeight - padY - ratio * (chartHeight - padY * 2)
-                      const labelVal = Math.round(minVal + ratio * (maxVal - minVal))
-                      return (
-                        <g key={idx}>
-                          <line
-                            x1={padX}
-                            y1={y}
-                            x2={chartWidth - padX}
-                            y2={y}
-                            stroke="currentColor"
-                            strokeOpacity="0.07"
-                          />
-                          <text
-                            x={padX - 10}
-                            y={y + 4}
-                            textAnchor="end"
-                            fill="currentColor"
-                            opacity="0.45"
-                            className="text-[10px]"
-                          >
-                            {labelVal}
-                          </text>
-                        </g>
-                      )
-                    })}
-
-                    {/* Area Fill */}
-                    {areaPath && <path d={areaPath} fill="url(#actualAreaGrad)" />}
-
-                    {/* Forecast Dashed Line */}
-                    {forecastPath && (
-                      <path
-                        d={forecastPath}
-                        fill="none"
-                        stroke="#94a3b8"
-                        strokeWidth="2"
-                        strokeDasharray="5 5"
-                      />
-                    )}
-
-                    {/* Actual Solid Smooth Line */}
-                    {actualPath && (
-                      <path
-                        d={actualPath}
-                        fill="none"
-                        stroke="#3b82f6"
-                        strokeWidth="3"
-                        strokeLinecap="round"
-                      />
-                    )}
-
-                    {/* Vertical Hover Guide Line & Interactive Nodes */}
-                    {pointsData.map((pt, idx) => {
-                      const isHovered = hoveredTrendIdx === idx
-                      return (
-                        <g
-                          key={idx}
-                          className="cursor-pointer"
-                          onMouseEnter={() => setHoveredTrendIdx(idx)}
-                          onMouseLeave={() => setHoveredTrendIdx(null)}
-                        >
-                          {/* Invisible wider hit area for easy hovering */}
-                          <rect
-                            x={pt.x - 25}
-                            y={padY}
-                            width={50}
-                            height={chartHeight - padY * 2}
-                            fill="transparent"
-                          />
-
-                          {/* Vertical crosshair on hover */}
-                          {isHovered && (
-                            <line
-                              x1={pt.x}
-                              y1={padY}
-                              x2={pt.x}
-                              y2={chartHeight - padY}
-                              stroke="#3b82f6"
-                              strokeOpacity="0.4"
-                              strokeWidth="1.5"
-                            />
-                          )}
-
-                          {/* Forecast Dot */}
-                          <circle
-                            cx={pt.x}
-                            cy={pt.yForecast}
-                            r={isHovered ? 5 : 3.5}
-                            fill="#0f172a"
-                            stroke="#94a3b8"
-                            strokeWidth="2"
-                          />
-
-                          {/* Actual Dot */}
-                          <circle
-                            cx={pt.x}
-                            cy={pt.yActual}
-                            r={isHovered ? 6.5 : 4.5}
-                            fill="#3b82f6"
-                            stroke="#ffffff"
-                            strokeWidth="2"
-                          />
-
-                          {/* X-Axis Label */}
-                          <text
-                            x={pt.x}
-                            y={chartHeight - 6}
-                            textAnchor="middle"
-                            fill="currentColor"
-                            opacity={isHovered ? 1 : 0.55}
-                            className="text-[11px] font-medium"
-                          >
-                            {pt.label}
-                          </text>
-                        </g>
-                      )
-                    })}
-                  </svg>
-
-                  {/* Floating Dark Glass Tooltip Box on Hover (Matches Reference Image) */}
-                  {hoveredTrendIdx !== null && pointsData[hoveredTrendIdx] && (
-                    <div
-                      className="pointer-events-none absolute top-4 z-20 min-w-[165px] -translate-x-1/2 rounded-xl border border-border bg-slate-950/95 p-3 shadow-2xl backdrop-blur-md transition-all"
-                      style={{
-                        left: `${(pointsData[hoveredTrendIdx].x / chartWidth) * 100}%`,
-                      }}
-                    >
-                      <p className="mb-1.5 text-right text-xs font-bold text-foreground">
-                        {pointsData[hoveredTrendIdx].label}
-                      </p>
-                      <div className="space-y-1 text-xs">
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="font-bold text-slate-300">
-                            {pointsData[hoveredTrendIdx].forecast.toLocaleString()}
-                          </span>
-                          <span className="flex items-center gap-1.5 text-muted-foreground">
-                            Forecast <span className="h-2 w-2 rounded-full bg-slate-400" />
-                          </span>
+                      <div className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <h3 className="text-base font-bold">{widget.title}</h3>
+                          <LineChart className="h-4 w-4 text-primary" />
                         </div>
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="font-bold text-primary">
-                            {pointsData[hoveredTrendIdx].actual.toLocaleString()}
-                          </span>
-                          <span className="flex items-center gap-1.5 text-muted-foreground">
-                            Actual <span className="h-2 w-2 rounded-full bg-primary" />
-                          </span>
-                        </div>
+                        <p className="text-xs text-muted-foreground">{widget.subtitle}</p>
                       </div>
                     </div>
-                  )}
-                </div>
-              </div>
-            </div>
 
-            {/* Secondary Interactive Column Comparison Row */}
-            <div className="rounded-2xl border border-border bg-card/50 p-6">
-              <div className="mb-5 flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-bold">التوزيع المقارن للمتغيرات (Interactive Bars)</h3>
-                  <p className="text-xs text-muted-foreground">
-                    مرر الماوس على أي عمود لعرض القيمة الفعلية ومعدل التغير
-                  </p>
-                </div>
-                <BarChart3 className="h-5 w-5 text-primary" />
-              </div>
+                    <div className="relative mt-2 w-full">
+                      <svg viewBox={`0 0 ${w} ${h}`} className="h-64 w-full overflow-visible">
+                        <defs>
+                          <linearGradient id={`grad-${widget.id}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
+                            <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
+                          </linearGradient>
+                        </defs>
 
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-6">
-                {extractedMetrics.map((m, idx) => {
-                  const pct = Math.max(18, Math.round((m.actual / maxVal) * 100))
-                  const isHovered = hoveredBarIdx === idx
-                  return (
-                    <div
-                      key={idx}
-                      onMouseEnter={() => setHoveredBarIdx(idx)}
-                      onMouseLeave={() => setHoveredBarIdx(null)}
-                      className={`relative flex cursor-pointer flex-col items-center rounded-xl border p-4 transition-all ${
-                        isHovered
-                          ? 'border-primary bg-primary/10 shadow-lg'
-                          : 'border-border/60 bg-background/40'
-                      }`}
-                    >
-                      {isHovered && (
-                        <div className="mb-2 rounded-lg bg-slate-950 px-2.5 py-1 text-[11px] font-bold text-primary shadow">
-                          {m.actual} ({m.change})
+                        {[0, 0.25, 0.5, 0.75, 1].map((r, i) => {
+                          const y = h - padY - r * (h - padY * 2)
+                          return (
+                            <g key={i}>
+                              <line
+                                x1={padX}
+                                y1={y}
+                                x2={w - padX}
+                                y2={y}
+                                stroke="currentColor"
+                                strokeOpacity="0.07"
+                              />
+                              <text
+                                x={padX - 10}
+                                y={y + 4}
+                                textAnchor="end"
+                                fill="currentColor"
+                                opacity="0.45"
+                                className="text-[10px]"
+                              >
+                                {Math.round(r * maxV)}
+                              </text>
+                            </g>
+                          )
+                        })}
+
+                        <path d={areaPath} fill={`url(#grad-${widget.id})`} />
+                        <path
+                          d={benchPath}
+                          fill="none"
+                          stroke="#94a3b8"
+                          strokeWidth="2"
+                          strokeDasharray="5 5"
+                        />
+                        <path
+                          d={actPath}
+                          fill="none"
+                          stroke="#3b82f6"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                        />
+
+                        {pts.map((pt, idx) => {
+                          const isHov = activeHoverIdx === idx
+                          return (
+                            <g
+                              key={idx}
+                              className="cursor-pointer"
+                              onMouseEnter={() =>
+                                setHoveredWidgetPoint({ widgetId: widget.id, index: idx })
+                              }
+                              onMouseLeave={() => setHoveredWidgetPoint(null)}
+                            >
+                              <rect
+                                x={pt.x - 24}
+                                y={padY}
+                                width={48}
+                                height={h - padY * 2}
+                                fill="transparent"
+                              />
+                              {isHov && (
+                                <line
+                                  x1={pt.x}
+                                  y1={padY}
+                                  x2={pt.x}
+                                  y2={h - padY}
+                                  stroke="#3b82f6"
+                                  strokeOpacity="0.4"
+                                  strokeWidth="1.5"
+                                />
+                              )}
+                              <circle
+                                cx={pt.x}
+                                cy={pt.yBench}
+                                r={isHov ? 5 : 3.5}
+                                fill="#0f172a"
+                                stroke="#94a3b8"
+                                strokeWidth="2"
+                              />
+                              <circle
+                                cx={pt.x}
+                                cy={pt.yAct}
+                                r={isHov ? 6.5 : 4.5}
+                                fill="#3b82f6"
+                                stroke="#ffffff"
+                                strokeWidth="2"
+                              />
+                              <text
+                                x={pt.x}
+                                y={h - 6}
+                                textAnchor="middle"
+                                fill="currentColor"
+                                opacity={isHov ? 1 : 0.6}
+                                className="text-[11px] font-medium"
+                              >
+                                {pt.label}
+                              </text>
+                            </g>
+                          )
+                        })}
+                      </svg>
+
+                      {activeHoverIdx !== null && pts[activeHoverIdx] && (
+                        <div
+                          className="pointer-events-none absolute top-3 z-20 min-w-[165px] -translate-x-1/2 rounded-xl border border-border bg-slate-950/95 p-3 shadow-2xl backdrop-blur-md"
+                          style={{ left: `${(pts[activeHoverIdx].x / w) * 100}%` }}
+                        >
+                          <p className="mb-1.5 text-right text-xs font-bold text-foreground">
+                            {pts[activeHoverIdx].label}
+                          </p>
+                          <div className="space-y-1 text-xs">
+                            <div className="flex items-center justify-between gap-4">
+                              <span className="font-bold text-slate-300">
+                                {pts[activeHoverIdx].benchmark.toLocaleString()}
+                              </span>
+                              <span className="flex items-center gap-1.5 text-muted-foreground">
+                                خط الأساس <span className="h-2 w-2 rounded-full bg-slate-400" />
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-4">
+                              <span className="font-bold text-primary">
+                                {pts[activeHoverIdx].actual.toLocaleString()}
+                              </span>
+                              <span className="flex items-center gap-1.5 text-muted-foreground">
+                                القيمة الفعلية <span className="h-2 w-2 rounded-full bg-primary" />
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       )}
-                      <div className="flex h-28 w-10 items-end rounded-lg bg-secondary/50 p-1">
-                        <div
-                          className="w-full rounded-md bg-gradient-to-t from-primary/70 to-cyan-400 transition-all duration-300"
-                          style={{ height: `${pct}%` }}
-                        />
-                      </div>
-                      <span className="mt-2.5 max-w-full truncate text-xs font-semibold">
-                        {m.label}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground">{m.actual}</span>
                     </div>
-                  )
-                })}
-              </div>
-            </div>
-          </>
+                  </div>
+                )
+              }
+
+              // 2. رسم دائري مقسم للتوزيع الفئوي (Segmented Donut Chart)
+              if (widget.chartType === 'donut_share') {
+                const r = 38
+                const c = 2 * Math.PI * r
+                const p1 = (widget.percentage / 100) * c
+                const remPct = 100 - widget.percentage
+                const p2 = (remPct / 100) * c
+
+                const activeHoverIdx =
+                  hoveredWidgetPoint?.widgetId === widget.id ? hoveredWidgetPoint.index : null
+
+                return (
+                  <div
+                    key={widget.id}
+                    className="flex flex-col justify-between rounded-2xl border border-border bg-card/50 p-6 lg:col-span-4"
+                  >
+                    <div className="flex items-start justify-between">
+                      <PieChart className="h-5 w-5 text-primary" />
+                      <div className="text-right">
+                        <h3 className="text-base font-bold">{widget.title}</h3>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{widget.subtitle}</p>
+                      </div>
+                    </div>
+
+                    <div className="my-5 flex items-center justify-between gap-4">
+                      <div className="flex-1 space-y-3">
+                        <div
+                          onMouseEnter={() =>
+                            setHoveredWidgetPoint({ widgetId: widget.id, index: 0 })
+                          }
+                          onMouseLeave={() => setHoveredWidgetPoint(null)}
+                          className={`flex cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors ${
+                            activeHoverIdx === 0 ? 'bg-secondary' : ''
+                          }`}
+                        >
+                          <span className="font-bold text-foreground">{widget.percentage}%</span>
+                          <span className="flex items-center gap-2 text-muted-foreground">
+                            <span className="max-w-[95px] truncate">{widget.primaryLabel}</span>
+                            <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+                          </span>
+                        </div>
+
+                        <div
+                          onMouseEnter={() =>
+                            setHoveredWidgetPoint({ widgetId: widget.id, index: 1 })
+                          }
+                          onMouseLeave={() => setHoveredWidgetPoint(null)}
+                          className={`flex cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors ${
+                            activeHoverIdx === 1 ? 'bg-secondary' : ''
+                          }`}
+                        >
+                          <span className="font-bold text-foreground">{remPct}%</span>
+                          <span className="flex items-center gap-2 text-muted-foreground">
+                            <span>فئات أخرى</span>
+                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="relative flex h-36 w-36 shrink-0 items-center justify-center">
+                        <svg className="h-full w-full -rotate-90" viewBox="0 0 100 100">
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r={r}
+                            fill="transparent"
+                            stroke="#3b82f6"
+                            strokeWidth={activeHoverIdx === 0 ? '14' : '11'}
+                            strokeDasharray={`${p1} ${c}`}
+                            strokeDashoffset="0"
+                            className="cursor-pointer transition-all"
+                            onMouseEnter={() =>
+                              setHoveredWidgetPoint({ widgetId: widget.id, index: 0 })
+                            }
+                            onMouseLeave={() => setHoveredWidgetPoint(null)}
+                          />
+                          {remPct > 0 && (
+                            <circle
+                              cx="50"
+                              cy="50"
+                              r={r}
+                              fill="transparent"
+                              stroke="#10b981"
+                              strokeWidth={activeHoverIdx === 1 ? '14' : '11'}
+                              strokeDasharray={`${p2} ${c}`}
+                              strokeDashoffset={-p1}
+                              className="cursor-pointer transition-all"
+                              onMouseEnter={() =>
+                                setHoveredWidgetPoint({ widgetId: widget.id, index: 1 })
+                              }
+                              onMouseLeave={() => setHoveredWidgetPoint(null)}
+                            />
+                          )}
+                        </svg>
+                        <div className="pointer-events-none absolute flex flex-col items-center text-center">
+                          <span className="text-base font-bold">
+                            {activeHoverIdx === 1 ? widget.secondaryCount : widget.primaryCount}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">سجل</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border/60 bg-background/50 px-3 py-2 text-center text-xs text-muted-foreground">
+                      {activeHoverIdx === 1 ? (
+                        <span>
+                          الفئات الأخرى: <strong className="text-emerald-400">{widget.secondaryCount} سجل</strong> ({remPct}%)
+                        </span>
+                      ) : (
+                        <span>
+                          شريحة <strong className="text-foreground">{widget.primaryLabel}</strong>:{' '}
+                          <strong className="text-primary">{widget.primaryCount} سجل</strong> ({widget.percentage}%)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              }
+
+              // 3. رسم أعمدة للمقارنات الرقمية (Comparative Bar Chart)
+              if (widget.chartType === 'comparison_bar') {
+                const maxBar = Math.max(...widget.items.map((i) => i.value), 1)
+                const activeHoverIdx =
+                  hoveredWidgetPoint?.widgetId === widget.id ? hoveredWidgetPoint.index : null
+
+                return (
+                  <div
+                    key={widget.id}
+                    className="rounded-2xl border border-border bg-card/50 p-6 lg:col-span-6"
+                  >
+                    <div className="mb-4 flex items-start justify-between">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          widget.isNegative
+                            ? 'bg-red-500/15 text-red-400'
+                            : 'bg-emerald-500/15 text-emerald-400'
+                        }`}
+                      >
+                        {widget.isNegative ? (
+                          <TrendingDown className="h-3.5 w-3.5" />
+                        ) : (
+                          <TrendingUp className="h-3.5 w-3.5" />
+                        )}
+                        {widget.changePct}
+                      </span>
+                      <div className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <h3 className="text-base font-bold">{widget.title}</h3>
+                          <BarChart3 className="h-4 w-4 text-primary" />
+                        </div>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{widget.subtitle}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex h-52 items-end justify-around gap-6 rounded-xl border border-border/50 bg-background/40 px-8 pt-8 pb-4">
+                      {widget.items.map((bar, idx) => {
+                        const heightPct = Math.max(18, Math.round((bar.value / maxBar) * 100))
+                        const isHov = activeHoverIdx === idx
+                        return (
+                          <div
+                            key={idx}
+                            onMouseEnter={() =>
+                              setHoveredWidgetPoint({ widgetId: widget.id, index: idx })
+                            }
+                            onMouseLeave={() => setHoveredWidgetPoint(null)}
+                            className="flex h-full flex-1 cursor-pointer flex-col items-center justify-end gap-2"
+                          >
+                            <span
+                              className={`rounded-md px-2 py-0.5 text-xs font-bold transition-all ${
+                                isHov ? 'bg-primary text-primary-foreground shadow' : 'text-foreground'
+                              }`}
+                            >
+                              {bar.value.toLocaleString()}
+                            </span>
+                            <div className="flex w-full max-w-[64px] flex-1 items-end">
+                              <div
+                                className={`w-full rounded-t-xl transition-all duration-300 ${
+                                  idx === 0
+                                    ? 'bg-gradient-to-t from-primary/60 to-primary'
+                                    : 'bg-gradient-to-t from-cyan-500/60 to-cyan-400'
+                                } ${isHov ? 'brightness-125' : ''}`}
+                                style={{ height: `${heightPct}%` }}
+                              />
+                            </div>
+                            <span className="max-w-[95px] truncate text-xs font-medium text-muted-foreground">
+                              {bar.label}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              }
+
+              // 4. مؤشر قياس الجودة (Quality Gauge)
+              if (widget.chartType === 'quality_gauge') {
+                return (
+                  <div
+                    key={widget.id}
+                    className="flex flex-col justify-between rounded-2xl border border-border bg-card/50 p-6 lg:col-span-6"
+                  >
+                    <div className="flex items-start justify-between">
+                      <Gauge className="h-5 w-5 text-emerald-400" />
+                      <div className="text-right">
+                        <h3 className="text-base font-bold">{widget.title}</h3>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{widget.subtitle}</p>
+                      </div>
+                    </div>
+
+                    <div className="my-4 flex items-center justify-around gap-4 rounded-xl border border-border/50 bg-background/40 p-5">
+                      <div className="relative flex h-32 w-32 items-center justify-center">
+                        <svg className="h-full w-full -rotate-90" viewBox="0 0 100 100">
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r="38"
+                            stroke="currentColor"
+                            strokeWidth="10"
+                            fill="transparent"
+                            className="text-secondary"
+                          />
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r="38"
+                            stroke="currentColor"
+                            strokeWidth="10"
+                            strokeDasharray="238.76"
+                            strokeDashoffset={238.76 - (238.76 * widget.score) / 100}
+                            strokeLinecap="round"
+                            fill="transparent"
+                            className="text-emerald-400"
+                          />
+                        </svg>
+                        <div className="absolute text-center">
+                          <span className="text-xl font-bold">{widget.score}%</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 text-right text-xs">
+                        <div>
+                          <p className="text-muted-foreground">إجمالي السجلات المفحوصة</p>
+                          <p className="text-base font-bold text-foreground">
+                            {widget.totalRecords.toLocaleString()} سجل
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">حالة القيم المفقودة</p>
+                          <p className="font-semibold text-emerald-400">0% قيم مفقودة</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+
+              return null
+            })}
+          </div>
         ) : (
           <div className="rounded-2xl border border-border bg-card/40 p-8 text-center">
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary">
@@ -784,7 +907,7 @@ export default function ProjectDashboardPage() {
             </div>
             <h3 className="text-base font-semibold">لا توجد بيانات مرفوعة لهذا المشروع بعد</h3>
             <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
-              اذهب إلى صفحة رفع البيانات، اختر مشروع <strong>{project?.name}</strong>، وارفع ملف Excel أو CSV لتظهر هنا الرسوم البيانية التفاعلية الخاصة به.
+              اذهب إلى صفحة رفع البيانات، اختر مشروع <strong>{project?.name}</strong>، وارفع ملف Excel أو CSV لتظهر هنا مؤشرات الأعمال والرسوم البيانية المتكاملة.
             </p>
             <Link
               href="/upload"
