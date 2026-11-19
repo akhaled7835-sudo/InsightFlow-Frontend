@@ -18,7 +18,7 @@ import {
   LineChart,
   Target,
   Award,
-  Gauge,
+  Layers,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -53,11 +53,10 @@ type SmartVisualWidget =
     }
   | {
       id: string
-      chartType: 'quality_gauge'
+      chartType: 'metric_distribution'
       title: string
       subtitle: string
-      score: number
-      totalRecords: number
+      metrics: Array<{ label: string; value: number; pct: number; isNegative: boolean }>
     }
 
 export default function ProjectDashboardPage() {
@@ -68,7 +67,6 @@ export default function ProjectDashboardPage() {
   const [selectedDatasetIndex, setSelectedDatasetIndex] = useState<number>(0)
   const [loading, setLoading] = useState(true)
 
-  // حالات التفاعل بالماوس لكل رسم بياني
   const [hoveredWidgetPoint, setHoveredWidgetPoint] = useState<{
     widgetId: string
     index: number
@@ -129,7 +127,7 @@ export default function ProjectDashboardPage() {
     return 0
   }, [activeDataset, insights])
 
-  // محرك تحليل الرؤى واختيار نوع الرسم البياني الأنسب لكل Insight ديناميكياً
+  // بناء الرسوم البيانية بناءً على محتوى البيانات الفعلي فقط (بدون بطاقات موثوقية مكررة)
   const { smartWidgets, businessKpis } = useMemo(() => {
     const widgets: SmartVisualWidget[] = []
     const kpis: Array<{
@@ -138,16 +136,27 @@ export default function ProjectDashboardPage() {
       change: string
       isNegative: boolean
       sparkline: string
-      icon: 'target' | 'trend' | 'award' | 'gauge'
+      icon: 'target' | 'trend' | 'award' | 'layers'
     }> = []
 
     const allSeriesPoints: Array<{ label: string; actual: number; benchmark: number }> = []
+    const extractedBarsForDistribution: Array<{
+      label: string
+      value: number
+      pct: number
+      isNegative: boolean
+    }> = []
 
     insights.forEach((ins, idx) => {
       const title = ins.title || ''
       const desc = ins.description || ''
 
-      // 1. اكتشاف رؤى المقارنة الرقمية بين متغيرين أو فترتين (مثل PER 2019 و PER 2020 أو Return_year و Return_Month)
+      // تجاهل بطاقة اكتمال البيانات العامة لعدم تكرارها في الرسوم البيانية
+      if (title.includes('اكتمال البيانات')) {
+        return
+      }
+
+      // 1. رؤى المقارنة الرقمية بين المتغيرات
       const valueMatches = [...desc.matchAll(/([\d.]+)\s+في\s+'([^']+)'/g)]
       const pctMatch = desc.match(/([+-]?\d+(?:\.\d+)?%)/)
 
@@ -163,13 +172,12 @@ export default function ProjectDashboardPage() {
           id: `comp-${idx}`,
           chartType: 'comparison_bar',
           title: title.replace('مقارنة الأداء بين', 'مقارنة مؤشر'),
-          subtitle: `مقارنة القيم الفعلية بين ${items[0].label} و ${items[1].label}`,
+          subtitle: `تحليل الفروق الرقمية بين ${items[0].label} و ${items[1].label}`,
           items,
           changePct: changeStr,
           isNegative: isNeg,
         })
 
-        // إضافة KPI متعلق بأداء هذا المؤشر في المشروع
         if (kpis.length < 2) {
           kpis.push({
             title: `متوسط ${items[1].label}`,
@@ -183,7 +191,6 @@ export default function ProjectDashboardPage() {
           })
         }
 
-        // تجميع النقاط لرسم منحنى اتجاه شامل إذا تعددت المؤشرات
         items.forEach((it) => {
           if (!allSeriesPoints.some((p) => p.label === it.label)) {
             allSeriesPoints.push({
@@ -191,12 +198,18 @@ export default function ProjectDashboardPage() {
               actual: it.value,
               benchmark: Number((it.value * (isNeg ? 1.09 : 0.93)).toFixed(2)),
             })
+            extractedBarsForDistribution.push({
+              label: it.label,
+              value: it.value,
+              pct: Math.abs(parseFloat(changeStr)) || 50,
+              isNegative: isNeg,
+            })
           }
         })
         return
       }
 
-      // 2. اكتشاف رؤى التوزيع الفئوي والاستحواذ (مثل تركز التوزيع حسب الوظيفة: Sales rep)
+      // 2. رؤى التوزيع الفئوي والاستحواذ (مثل الاسكندرية أو المؤهل الدراسي أو الوظيفة)
       const labelMatch = desc.match(/فئة\s*'([^']+)'/)
       const countMatch = desc.match(/بواقع\s*(\d+)\s*سجل/)
       if (labelMatch && countMatch) {
@@ -209,41 +222,58 @@ export default function ProjectDashboardPage() {
         widgets.push({
           id: `donut-${idx}`,
           chartType: 'donut_share',
-          title: `حصة الفئات حسب ${catName}`,
-          subtitle: `نسبة استحواذ الشريحة الأعلى (${labelMatch[1]})`,
+          title: `توزيع الحصص حسب ${catName}`,
+          subtitle: `استحواذ شريحة (${labelMatch[1]}) من إجمالي السجلات`,
           primaryLabel: labelMatch[1],
           primaryCount,
           secondaryCount: Math.max(0, total - primaryCount),
           percentage: pct,
         })
 
-        kpis.push({
-          title: `حصة ${labelMatch[1]}`,
-          value: `${pct}%`,
-          change: `${primaryCount} سجل`,
-          isNegative: false,
-          sparkline: 'M2 22 L22 17 L42 15 L60 9 L78 4',
-          icon: 'award',
-        })
+        if (kpis.length < 3) {
+          kpis.push({
+            title: `حصة ${labelMatch[1]}`,
+            value: `${pct}%`,
+            change: `${primaryCount} سجل`,
+            isNegative: false,
+            sparkline: 'M2 22 L22 17 L42 15 L60 9 L78 4',
+            icon: 'award',
+          })
+        }
         return
       }
 
-      // 3. اكتشاف رؤى اكتمال وجودة البيانات
-      const qualityMatch = title.match(/(\d+)%/) || desc.match(/(\d+)%/)
-      if (title.includes('اكتمال') || title.includes('جودة') || qualityMatch) {
-        const score = qualityMatch ? Number(qualityMatch[1]) : 100
-        widgets.push({
-          id: `gauge-${idx}`,
-          chartType: 'quality_gauge',
-          title: 'مؤشر موثوقية البيانات',
-          subtitle: 'نسبة السجلات الصالحة للتحليل الفوري',
-          score,
-          totalRecords,
-        })
+      // 3. أي Insight رقمي آخر (مثل التشتت أو الانحراف أو القيم المتطرفة) يُعرض كـ Bar أفقي خاص بالبيانات
+      const anyNumMatch = desc.match(/([\d.]+)/)
+      if (anyNumMatch) {
+        const numVal = parseFloat(anyNumMatch[1])
+        if (!isNaN(numVal)) {
+          extractedBarsForDistribution.push({
+            label: title.replace(/[()]/g, '').slice(0, 28),
+            value: numVal,
+            pct: Math.min(100, Math.max(15, Math.round(numVal))),
+            isNegative: desc.includes('انخفاض') || desc.includes('تراجع'),
+          })
+        }
       }
     })
 
-    // إضافة منحنى الاتجاه المقارن إذا توفرت سلسلتان أو أكثر في المشروع
+    // إضافة رسم بياني أفقي يجمع المؤشرات الإحصائية المستخرجة من البيانات بدلاً من البطاقات المكررة
+    if (extractedBarsForDistribution.length > 0) {
+      const maxDist = Math.max(...extractedBarsForDistribution.map((b) => b.value), 1)
+      widgets.push({
+        id: 'data-metrics-bars',
+        chartType: 'metric_distribution',
+        title: 'ملخص المؤشرات الإحصائية للبيانات',
+        subtitle: 'مقارنة القيم والمتوسطات المستخرجة من أعمدة الملف',
+        metrics: extractedBarsForDistribution.slice(0, 5).map((b) => ({
+          ...b,
+          pct: Math.min(100, Math.max(12, Math.round((b.value / maxDist) * 100))),
+        })),
+      })
+    }
+
+    // إضافة منحنى الاتجاه المقارن في الصدارة إذا توفرت سلسلتان أو أكثر
     if (allSeriesPoints.length >= 2) {
       const first = allSeriesPoints[0].actual
       const last = allSeriesPoints[allSeriesPoints.length - 1].actual
@@ -261,37 +291,37 @@ export default function ProjectDashboardPage() {
       })
     }
 
-    // استكمال الـ 4 KPIs بمؤشرات الأعمال الخاصة بالمشروع (وليس أرقام أعمدة تقنية)
-    if (kpis.length < 4 && activeDataset) {
-      if (!kpis.some((k) => k.title.includes('حجم'))) {
+    // استكمال الـ 4 KPIs بمؤشرات فعلية من بيانات الملف
+    if (activeDataset) {
+      if (allSeriesPoints.length > 0 && kpis.length < 4) {
+        const peak = Math.max(...allSeriesPoints.map((p) => p.actual))
         kpis.push({
-          title: 'حجم العينة المحللة',
-          value: totalRecords.toLocaleString(),
-          change: '+100% تغطية',
+          title: 'أعلى متوسط مسجل',
+          value: peak.toLocaleString(),
+          change: 'ذروة المؤشرات',
           isNegative: false,
-          sparkline: 'M2 24 L20 18 L40 20 L60 11 L78 5',
-          icon: 'target',
+          sparkline: 'M2 26 L22 21 L44 13 L62 15 L78 3',
+          icon: 'award',
         })
       }
       if (kpis.length < 4) {
         kpis.push({
-          title: 'مؤشر جودة البيانات',
-          value: '100%',
-          change: 'موثوقية عالية',
+          title: 'إجمالي الحالات المحللة',
+          value: totalRecords.toLocaleString(),
+          change: `${activeDataset.columnCount ?? 0} متغيرات`,
           isNegative: false,
-          sparkline: 'M2 20 L25 18 L45 12 L65 8 L78 4',
-          icon: 'gauge',
+          sparkline: 'M2 24 L20 18 L40 20 L60 11 L78 5',
+          icon: 'layers',
         })
       }
-      if (kpis.length < 4 && allSeriesPoints.length > 0) {
-        const peak = Math.max(...allSeriesPoints.map((p) => p.actual))
+      if (kpis.length < 4) {
         kpis.push({
-          title: 'ذروة الأداء المسجلة',
-          value: peak.toLocaleString(),
-          change: 'أعلى قيمة',
+          title: 'الرؤى المستخرجة',
+          value: `${insights.length}`,
+          change: 'تحليل نشط',
           isNegative: false,
-          sparkline: 'M2 26 L22 21 L44 13 L62 15 L78 3',
-          icon: 'award',
+          sparkline: 'M2 20 L25 18 L45 12 L65 8 L78 4',
+          icon: 'target',
         })
       }
     }
@@ -307,7 +337,7 @@ export default function ProjectDashboardPage() {
       <DashboardShell>
         <div className="flex h-96 items-center justify-center">
           <p className="animate-pulse text-sm text-muted-foreground">
-            جاري تحليل رؤى المشروع وبناء الرسوم المناسبة...
+            جاري تحليل بيانات المشروع وبناء الرسوم البيانية...
           </p>
         </div>
       </DashboardShell>
@@ -335,7 +365,7 @@ export default function ProjectDashboardPage() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                لوحة مؤشرات الأعمال التفاعلية — تتكيف الرسوم تلقائياً حسب طبيعة بيانات المشروع
+                لوحة تحليل البيانات التفاعلية — مرر المؤشر فوق أي رسم بياني لعرض القيم التفصيلية
               </p>
             </div>
           </div>
@@ -379,7 +409,7 @@ export default function ProjectDashboardPage() {
           </div>
         </div>
 
-        {/* Project Business KPIs (Extracted directly from Project Insights) */}
+        {/* Project Business KPIs */}
         {activeDataset && businessKpis.length > 0 && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {businessKpis.map((kpi, idx) => (
@@ -404,7 +434,7 @@ export default function ProjectDashboardPage() {
                     {kpi.icon === 'trend' && <Activity className="h-4 w-4" />}
                     {kpi.icon === 'award' && <Award className="h-4 w-4" />}
                     {kpi.icon === 'target' && <Target className="h-4 w-4" />}
-                    {kpi.icon === 'gauge' && <Gauge className="h-4 w-4" />}
+                    {kpi.icon === 'layers' && <Layers className="h-4 w-4" />}
                   </span>
                 </div>
                 <div className="mt-4 flex items-end justify-between">
@@ -423,7 +453,7 @@ export default function ProjectDashboardPage() {
                   </svg>
                   <div className="text-left">
                     <p className="text-2xl font-bold tracking-tight">{kpi.value}</p>
-                    <p className="max-w-[125px] truncate text-xs text-muted-foreground">
+                    <p className="max-w-[130px] truncate text-xs text-muted-foreground">
                       {kpi.title}
                     </p>
                   </div>
@@ -433,11 +463,11 @@ export default function ProjectDashboardPage() {
           </div>
         )}
 
-        {/* Adaptive Smart Charts Grid (Each Insight gets its matching visualization) */}
+        {/* Adaptive Data-Driven Charts Grid */}
         {activeDataset ? (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
             {smartWidgets.map((widget) => {
-              // 1. رسم منحنى الاتجاه التفاعلي (Trend Line & Area Chart)
+              // 1. منحنى الاتجاه التفاعلي
               if (widget.chartType === 'trend_line') {
                 const w = 540
                 const h = 210
@@ -640,7 +670,7 @@ export default function ProjectDashboardPage() {
                 )
               }
 
-              // 2. رسم دائري مقسم للتوزيع الفئوي (Segmented Donut Chart)
+              // 2. رسم دائري مقسم للتوزيع الفئوي (مثل الإسكندرية أو المؤهل الدراسي)
               if (widget.chartType === 'donut_share') {
                 const r = 38
                 const c = 2 * Math.PI * r
@@ -759,7 +789,7 @@ export default function ProjectDashboardPage() {
                 )
               }
 
-              // 3. رسم أعمدة للمقارنات الرقمية (Comparative Bar Chart)
+              // 3. رسم أعمدة للمقارنات الرقمية
               if (widget.chartType === 'comparison_bar') {
                 const maxBar = Math.max(...widget.items.map((i) => i.value), 1)
                 const activeHoverIdx =
@@ -835,63 +865,46 @@ export default function ProjectDashboardPage() {
                 )
               }
 
-              // 4. مؤشر قياس الجودة (Quality Gauge)
-              if (widget.chartType === 'quality_gauge') {
+              // 4. رسم بياني أفقي للمؤشرات الإحصائية المستخرجة من البيانات
+              if (widget.chartType === 'metric_distribution') {
                 return (
                   <div
                     key={widget.id}
                     className="flex flex-col justify-between rounded-2xl border border-border bg-card/50 p-6 lg:col-span-6"
                   >
-                    <div className="flex items-start justify-between">
-                      <Gauge className="h-5 w-5 text-emerald-400" />
+                    <div className="mb-4 flex items-start justify-between">
+                      <Activity className="h-5 w-5 text-cyan-400" />
                       <div className="text-right">
                         <h3 className="text-base font-bold">{widget.title}</h3>
                         <p className="mt-0.5 text-xs text-muted-foreground">{widget.subtitle}</p>
                       </div>
                     </div>
 
-                    <div className="my-4 flex items-center justify-around gap-4 rounded-xl border border-border/50 bg-background/40 p-5">
-                      <div className="relative flex h-32 w-32 items-center justify-center">
-                        <svg className="h-full w-full -rotate-90" viewBox="0 0 100 100">
-                          <circle
-                            cx="50"
-                            cy="50"
-                            r="38"
-                            stroke="currentColor"
-                            strokeWidth="10"
-                            fill="transparent"
-                            className="text-secondary"
-                          />
-                          <circle
-                            cx="50"
-                            cy="50"
-                            r="38"
-                            stroke="currentColor"
-                            strokeWidth="10"
-                            strokeDasharray="238.76"
-                            strokeDashoffset={238.76 - (238.76 * widget.score) / 100}
-                            strokeLinecap="round"
-                            fill="transparent"
-                            className="text-emerald-400"
-                          />
-                        </svg>
-                        <div className="absolute text-center">
-                          <span className="text-xl font-bold">{widget.score}%</span>
+                    <div className="space-y-4 rounded-xl border border-border/50 bg-background/40 p-4">
+                      {widget.metrics.map((m, i) => (
+                        <div key={i}>
+                          <div className="mb-1.5 flex items-center justify-between text-xs">
+                            <span
+                              className={`font-bold ${
+                                m.isNegative ? 'text-red-400' : 'text-primary'
+                              }`}
+                            >
+                              {m.value.toLocaleString()}
+                            </span>
+                            <span className="font-medium text-muted-foreground">{m.label}</span>
+                          </div>
+                          <div className="h-2.5 w-full overflow-hidden rounded-full bg-secondary">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                m.isNegative
+                                  ? 'bg-gradient-to-r from-red-500/70 to-red-400'
+                                  : 'bg-gradient-to-r from-primary to-cyan-400'
+                              }`}
+                              style={{ width: `${m.pct}%` }}
+                            />
+                          </div>
                         </div>
-                      </div>
-
-                      <div className="space-y-3 text-right text-xs">
-                        <div>
-                          <p className="text-muted-foreground">إجمالي السجلات المفحوصة</p>
-                          <p className="text-base font-bold text-foreground">
-                            {widget.totalRecords.toLocaleString()} سجل
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">حالة القيم المفقودة</p>
-                          <p className="font-semibold text-emerald-400">0% قيم مفقودة</p>
-                        </div>
-                      </div>
+                      ))}
                     </div>
                   </div>
                 )
