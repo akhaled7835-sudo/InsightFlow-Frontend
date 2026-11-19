@@ -466,7 +466,7 @@ export default function ProjectDashboardPage() {
         {/* Adaptive Data-Driven Charts Grid */}
         {activeDataset ? (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-            {smartWidgets.map((widget) => {
+            {smartWidgets.map((widget, widgetIdx) => {
               // 1. منحنى الاتجاه التفاعلي
               if (widget.chartType === 'trend_line') {
                 const w = 540
@@ -684,7 +684,9 @@ export default function ProjectDashboardPage() {
                 return (
                   <div
                     key={widget.id}
-                    className="flex flex-col justify-between rounded-2xl border border-border bg-card/50 p-6 lg:col-span-4"
+                    className={`flex flex-col justify-between rounded-2xl border border-border bg-card/50 p-6 ${
+  widgetIdx === 1 ? 'lg:col-span-4' : 'lg:col-span-6'
+}`}
                   >
                     <div className="flex items-start justify-between">
                       <PieChart className="h-5 w-5 text-primary" />
