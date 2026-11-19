@@ -10,9 +10,11 @@ import {
   Shield,
   Trash2,
   CheckCircle2,
+  AlertCircle,
   Crown,
   Search,
   Building2,
+  Loader2,
 } from 'lucide-react'
 
 type TeamMember = {
@@ -37,18 +39,18 @@ export default function TeamPage() {
   const [members, setMembers] = useState<TeamMember[]>([])
   const [searchQuery, setSearchQuery] = useState('')
 
-  // حقول دعوة عضو جديد
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteName, setInviteName] = useState('')
   const [inviteRole, setInviteRole] = useState<TeamMember['role']>('Analyst')
   const [inviting, setInviting] = useState(false)
   const [inviteSuccess, setInviteSuccess] = useState('')
+  const [inviteError, setInviteError] = useState('')
 
   useEffect(() => {
     async function loadWorkspaceTeam() {
       const session = getSession()
       const currentUserName = session?.fullName || (session as any)?.name || 'Amr Khaled'
-      const currentUserEmail = session?.email || 'amr.khaled@insightflow.ai'
+      const currentUserEmail = session?.email || 'akhaled7835@gmail.com'
 
       let wsId = session?.workspaceId || 'default'
       try {
@@ -59,15 +61,37 @@ export default function TeamPage() {
           if (firstWs.name) setWorkspaceName(firstWs.name)
         }
       } catch {
-        // fallback to session workspace
+        // fallback
       }
       setWorkspaceId(wsId)
 
-      // محاولة جلب الأعضاء من الباك إند إن وجد مسار، مع الدمج مع القائمة المحلية
       const storageKey = `insightflow_team_${wsId}`
-      const savedLocal = JSON.parse(localStorage.getItem(storageKey) || '[]')
+      const savedLocal: TeamMember[] = JSON.parse(localStorage.getItem(storageKey) || '[]')
 
-      if (Array.isArray(savedLocal) && savedLocal.length > 0) {
+      let backendMembers: TeamMember[] = []
+      if (wsId && wsId !== 'default') {
+        const rawMembers = await apiRequest<any[]>(`/api/workspaces/${wsId}/members`).catch(() => [])
+        if (Array.isArray(rawMembers)) {
+          backendMembers = rawMembers.map((m: any) => ({
+            id: m.userId || m.id || `backend-${m.email}`,
+            name: m.fullName || m.userName || m.email?.split('@')[0] || 'عضو الفريق',
+            email: m.email || '',
+            role: (m.role as TeamMember['role']) || 'Analyst',
+            status: 'نشط',
+            joinedAt: m.joinedAt || new Date().toISOString(),
+          }))
+        }
+      }
+
+      if (backendMembers.length > 0) {
+        const backendEmails = new Set(backendMembers.map((b) => b.email.toLowerCase()))
+        const pendingLocal = savedLocal.filter(
+          (l) => l.status === 'دعوة معلقة' && !backendEmails.has(l.email.toLowerCase())
+        )
+        const merged = [...backendMembers, ...pendingLocal]
+        setMembers(merged)
+        localStorage.setItem(storageKey, JSON.stringify(merged))
+      } else if (Array.isArray(savedLocal) && savedLocal.length > 0) {
         setMembers(savedLocal)
       } else {
         const initialMembers: TeamMember[] = [
@@ -100,18 +124,20 @@ export default function TeamPage() {
     if (!inviteEmail.trim()) return
     setInviting(true)
     setInviteSuccess('')
+    setInviteError('')
 
     try {
-      // محاولة إرسال الدعوة للباك إند إن توفر المسار
-      if (workspaceId && workspaceId !== 'default') {
-        await apiRequest(`/api/workspaces/${workspaceId}/members`, {
-          method: 'POST',
-          body: JSON.stringify({
-            email: inviteEmail.trim(),
-            role: inviteRole,
-          }),
-        }).catch(() => null)
+      if (!workspaceId || workspaceId === 'default') {
+        throw new Error('لم يتم العثور على مساحة عمل نشطة لإرسال الدعوة.')
       }
+
+      await apiRequest(`/api/workspaces/${workspaceId}/invitations`, {
+        method: 'POST',
+        body: JSON.stringify({
+          email: inviteEmail.trim(),
+          role: inviteRole,
+        }),
+      })
 
       const derivedName =
         inviteName.trim() ||
@@ -134,8 +160,10 @@ export default function TeamPage() {
 
       setInviteEmail('')
       setInviteName('')
-      setInviteSuccess(`تم إرسال دعوة الانضمام إلى ${newMember.email} بنجاح.`)
-      setTimeout(() => setInviteSuccess(''), 4000)
+      setInviteSuccess(`تم إرسال دعوة حقيقية إلى البريد الإلكتروني ${newMember.email} بنجاح!`)
+      setTimeout(() => setInviteSuccess(''), 6000)
+    } catch (err: any) {
+      setInviteError(err?.message || 'فشل إرسال البريد الإلكتروني من الخادم.')
     } finally {
       setInviting(false)
     }
@@ -160,7 +188,6 @@ export default function TeamPage() {
   return (
     <DashboardShell activeItem="team">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 p-6">
-        {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card/40 p-5">
           <div className="flex items-center gap-3">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary">
@@ -175,7 +202,7 @@ export default function TeamPage() {
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
-                تحكم في أعضاء مساحة العمل، أرسل الدعوات، وحدد صلاحيات الوصول للبيانات والتقارير
+                تحكم في أعضاء مساحة العمل، أرسل الدعوات عبر البريد الإلكتروني، وحدد صلاحيات الوصول
               </p>
             </div>
           </div>
@@ -186,17 +213,13 @@ export default function TeamPage() {
           </div>
         </div>
 
-        {/* Invite Member Form */}
         <div className="rounded-2xl border border-border bg-card/50 p-6">
           <div className="mb-4 flex items-center gap-2">
             <UserPlus className="h-5 w-5 text-primary" />
-            <h2 className="text-base font-bold">دعوة عضو جديد إلى مساحة العمل</h2>
+            <h2 className="text-base font-bold">دعوة عضو جديد عبر البريد الإلكتروني</h2>
           </div>
 
-          <form
-            onSubmit={handleInviteMember}
-            className="grid grid-cols-1 gap-3 sm:grid-cols-12"
-          >
+          <form onSubmit={handleInviteMember} className="grid grid-cols-1 gap-3 sm:grid-cols-12">
             <div className="sm:col-span-4">
               <input
                 type="text"
@@ -225,15 +248,9 @@ export default function TeamPage() {
                 onChange={(e) => setInviteRole(e.target.value as TeamMember['role'])}
                 className="h-10 w-full rounded-xl border border-input bg-secondary/50 px-3 text-xs font-medium outline-none focus:border-primary"
               >
-                <option value="Admin" className="bg-slate-900">
-                  مدير (Admin)
-                </option>
-                <option value="Analyst" className="bg-slate-900">
-                  محلل بيانات (Analyst)
-                </option>
-                <option value="Viewer" className="bg-slate-900">
-                  مشاهد فقط (Viewer)
-                </option>
+                <option value="Admin" className="bg-slate-900">مدير (Admin)</option>
+                <option value="Analyst" className="bg-slate-900">محلل بيانات (Analyst)</option>
+                <option value="Viewer" className="bg-slate-900">مشاهد فقط (Viewer)</option>
               </select>
             </div>
 
@@ -243,7 +260,7 @@ export default function TeamPage() {
                 disabled={inviting || !inviteEmail.trim()}
                 className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-50"
               >
-                <UserPlus className="h-4 w-4" />
+                {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
                 إرسال دعوة
               </button>
             </div>
@@ -255,9 +272,15 @@ export default function TeamPage() {
               {inviteSuccess}
             </p>
           )}
+
+          {inviteError && (
+            <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-red-400">
+              <AlertCircle className="h-4 w-4" />
+              {inviteError}
+            </p>
+          )}
         </div>
 
-        {/* Team Members Table / Cards */}
         <div className="rounded-2xl border border-border bg-card/50 p-6">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-base font-bold">أعضاء الفريق والصلاحيات</h2>
@@ -296,9 +319,7 @@ export default function TeamPage() {
                     <div>
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-bold text-foreground">{member.name}</p>
-                        {member.role === 'Owner' && (
-                          <Crown className="h-3.5 w-3.5 text-amber-400" />
-                        )}
+                        {member.role === 'Owner' && <Crown className="h-3.5 w-3.5 text-amber-400" />}
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                             member.status === 'نشط'
@@ -315,9 +336,7 @@ export default function TeamPage() {
 
                   <div className="flex items-center gap-3">
                     {member.role === 'Owner' ? (
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-xl border px-3 py-1.5 text-xs font-semibold ${roleBadge.color}`}
-                      >
+                      <span className={`inline-flex items-center gap-1 rounded-xl border px-3 py-1.5 text-xs font-semibold ${roleBadge.color}`}>
                         <Shield className="h-3.5 w-3.5" />
                         {roleBadge.label}
                       </span>
@@ -325,20 +344,12 @@ export default function TeamPage() {
                       <>
                         <select
                           value={member.role}
-                          onChange={(e) =>
-                            handleRoleChange(member.id, e.target.value as TeamMember['role'])
-                          }
+                          onChange={(e) => handleRoleChange(member.id, e.target.value as TeamMember['role'])}
                           className="h-9 rounded-xl border border-input bg-secondary/70 px-3 text-xs font-medium outline-none focus:border-primary"
                         >
-                          <option value="Admin" className="bg-slate-900">
-                            مدير النظام
-                          </option>
-                          <option value="Analyst" className="bg-slate-900">
-                            محلل بيانات
-                          </option>
-                          <option value="Viewer" className="bg-slate-900">
-                            مشاهد فقط
-                          </option>
+                          <option value="Admin" className="bg-slate-900">مدير النظام</option>
+                          <option value="Analyst" className="bg-slate-900">محلل بيانات</option>
+                          <option value="Viewer" className="bg-slate-900">مشاهد فقط</option>
                         </select>
 
                         <button
