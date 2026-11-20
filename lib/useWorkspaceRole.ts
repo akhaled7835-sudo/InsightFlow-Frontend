@@ -5,26 +5,65 @@ import { apiRequest, getSession } from '@/lib/api'
 
 export type WorkspaceRole = 'Owner' | 'Admin' | 'Analyst' | 'Viewer'
 
+export type WorkspaceSummary = {
+  id: string
+  name: string
+  description?: string
+}
+
+export const ACTIVE_WORKSPACE_KEY = 'insightflow_active_workspace_id'
+
+export function getStoredActiveWorkspaceId(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem(ACTIVE_WORKSPACE_KEY)
+}
+
+export function setStoredActiveWorkspaceId(workspaceId: string) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspaceId)
+}
+
 export function useWorkspaceRole() {
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
+  const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceSummary | null>(null)
   const [role, setRole] = useState<WorkspaceRole | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function fetchRole() {
+    async function fetchWorkspaceAndRole() {
       try {
         const session = getSession()
         const myEmail = session?.email?.toLowerCase()
 
         const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
-        const activeWs = wsList?.[0]
-        const wsId = activeWs?.id || activeWs?.workspaceId || session?.workspaceId
+        const mappedList: WorkspaceSummary[] = Array.isArray(wsList)
+          ? wsList.map((w: any) => ({
+              id: w.id || w.workspaceId,
+              name: w.name || 'مساحة عمل',
+              description: w.description,
+            }))
+          : []
 
-        if (!wsId || wsId === 'default') {
+        setWorkspaces(mappedList)
+
+        const savedId = getStoredActiveWorkspaceId()
+        const selected =
+          mappedList.find((w) => w.id === savedId) ||
+          mappedList[0] ||
+          (session?.workspaceId ? { id: session.workspaceId, name: 'مساحة العمل الرئيسية' } : null)
+
+        setActiveWorkspace(selected)
+
+        if (!selected?.id || selected.id === 'default') {
           setRole('Owner')
           return
         }
 
-        const members = await apiRequest<any[]>(`/api/workspaces/${wsId}/members`).catch(() => [])
+        setStoredActiveWorkspaceId(selected.id)
+
+        const members = await apiRequest<any[]>(`/api/workspaces/${selected.id}/members`).catch(
+          () => []
+        )
         const me = Array.isArray(members)
           ? members.find((m: any) => m.email?.toLowerCase() === myEmail)
           : null
@@ -41,8 +80,13 @@ export function useWorkspaceRole() {
       }
     }
 
-    fetchRole()
+    fetchWorkspaceAndRole()
   }, [])
+
+  function switchWorkspace(workspaceId: string) {
+    setStoredActiveWorkspaceId(workspaceId)
+    window.location.reload()
+  }
 
   const isOwner = role === 'Owner'
   const isAdmin = role === 'Admin'
@@ -50,15 +94,17 @@ export function useWorkspaceRole() {
   const isViewer = role === 'Viewer'
 
   return {
+    workspaces,
+    activeWorkspace,
+    activeWorkspaceId: activeWorkspace?.id || '',
+    switchWorkspace,
     role,
     loading,
     isOwner,
     isAdmin,
     isAnalyst,
     isViewer,
-    // المالك والأدمن فقط يمكنهما دعوة أو تعديل أو حذف الأعضاء
     canManageTeam: isOwner || isAdmin,
-    // المالك والأدمن والمحلل يمكنهم التحليل ورفع الملفات (المشاهد ممنوع)
     canAnalyzeAndUpload: isOwner || isAdmin || isAnalyst,
   }
 }

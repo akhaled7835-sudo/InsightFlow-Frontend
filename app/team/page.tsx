@@ -36,7 +36,12 @@ const ROLE_LABELS: Record<TeamMember['role'], { label: string; color: string }> 
 }
 
 export default function TeamPage() {
-  const { canManageTeam, loading: roleLoading } = useWorkspaceRole()
+  const {
+    canManageTeam,
+    loading: roleLoading,
+    activeWorkspaceId,
+    activeWorkspace,
+  } = useWorkspaceRole()
 
   const [workspaceName, setWorkspaceName] = useState('Acme Analytics')
   const [workspaceId, setWorkspaceId] = useState<string>('')
@@ -51,21 +56,28 @@ export default function TeamPage() {
   const [inviteError, setInviteError] = useState('')
 
   useEffect(() => {
+    if (roleLoading) return
+
     async function loadWorkspaceTeam() {
       const session = getSession()
       const currentUserName = session?.fullName || (session as any)?.name || 'Amr Khaled'
       const currentUserEmail = session?.email || 'akhaled7835@gmail.com'
 
-      let wsId = session?.workspaceId || 'default'
-      try {
-        const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
-        const firstWs = wsList?.[0]
-        if (firstWs) {
-          wsId = firstWs.id || firstWs.workspaceId || wsId
-          if (firstWs.name) setWorkspaceName(firstWs.name)
+      let wsId = activeWorkspaceId || session?.workspaceId || 'default'
+      if (activeWorkspace?.name) {
+        setWorkspaceName(activeWorkspace.name)
+      } else {
+        try {
+          const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
+          const selectedWs =
+            wsList?.find((w: any) => (w.id || w.workspaceId) === activeWorkspaceId) || wsList?.[0]
+          if (selectedWs) {
+            wsId = selectedWs.id || selectedWs.workspaceId || wsId
+            if (selectedWs.name) setWorkspaceName(selectedWs.name)
+          }
+        } catch {
+          // fallback
         }
-      } catch {
-        // fallback
       }
       setWorkspaceId(wsId)
 
@@ -114,7 +126,7 @@ export default function TeamPage() {
     }
 
     loadWorkspaceTeam()
-  }, [])
+  }, [activeWorkspaceId, activeWorkspace?.name, roleLoading])
 
   function persistMembers(updated: TeamMember[]) {
     setMembers(updated)

@@ -56,7 +56,7 @@ function formatSize(bytes: number) {
 
 export default function UploadPage() {
   const { t } = useTranslation()
-  const { canAnalyzeAndUpload, loading: roleLoading } = useWorkspaceRole()
+  const { canAnalyzeAndUpload, loading: roleLoading, activeWorkspaceId } = useWorkspaceRole()
   const [dragging, setDragging] = useState(false)
   const [files, setFiles] = useState<UploadFile[]>([])
   const [workspaceId, setWorkspaceId] = useState<string>('')
@@ -68,11 +68,17 @@ export default function UploadPage() {
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    if (roleLoading) return
+
     async function loadContext() {
       try {
-        const wsList = await apiRequest<any[]>('/api/workspaces')
-        const firstWs = wsList?.[0]
-        const wsId = firstWs?.id || firstWs?.workspaceId
+        let wsId = activeWorkspaceId
+        if (!wsId) {
+          const wsList = await apiRequest<any[]>('/api/workspaces')
+          const firstWs = wsList?.[0]
+          wsId = firstWs?.id || firstWs?.workspaceId
+        }
+
         if (wsId) {
           setWorkspaceId(wsId)
           const projList = await apiRequest<any[]>(`/api/workspaces/${wsId}/projects`)
@@ -83,6 +89,9 @@ export default function UploadPage() {
             }))
             setProjects(mapped)
             setSelectedProjectId(mapped[0].id)
+          } else {
+            setProjects([])
+            setSelectedProjectId('')
           }
         }
       } catch (error) {
@@ -90,7 +99,7 @@ export default function UploadPage() {
       }
     }
     loadContext()
-  }, [])
+  }, [activeWorkspaceId, roleLoading])
 
   async function handleCreateProject(e: React.FormEvent) {
     e.preventDefault()
@@ -373,7 +382,7 @@ export default function UploadPage() {
               onChange={(e) => setSelectedProjectId(e.target.value)}
               className="h-10 rounded-xl border border-input bg-secondary/60 px-3 text-sm font-medium outline-none focus:border-primary"
             >
-              {projects.length === 0 && <option value="">جاري تحميل المشاريع...</option>}
+              {projects.length === 0 && <option value="">لا توجد مشاريع بعد — أنشئ مشروعاً</option>}
               {projects.map((p) => (
                 <option key={p.id} value={p.id} className="bg-slate-900">
                   {p.name}

@@ -31,18 +31,24 @@ type AnalyticsDatasetItem = {
 }
 
 export default function AnalyticsPage() {
-  const { canAnalyzeAndUpload } = useWorkspaceRole()
+  const { canAnalyzeAndUpload, loading: roleLoading, activeWorkspaceId } = useWorkspaceRole()
   const [datasets, setDatasets] = useState<AnalyticsDatasetItem[]>([])
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [reanalyzing, setReanalyzing] = useState(false)
 
   useEffect(() => {
+    if (roleLoading) return
+
     async function loadAnalyticsWorkspace() {
+      setLoading(true)
       try {
-        const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
-        const firstWs = wsList?.[0]
-        const wsId = firstWs?.id || firstWs?.workspaceId
+        let wsId = activeWorkspaceId
+        if (!wsId) {
+          const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
+          const firstWs = wsList?.[0]
+          wsId = firstWs?.id || firstWs?.workspaceId
+        }
 
         let projList: Array<{ id: string; name: string }> = []
         if (wsId) {
@@ -58,10 +64,8 @@ export default function AnalyticsPage() {
         }
 
         const collected: AnalyticsDatasetItem[] = []
-        const seenIds = new Set<string>()
 
         projList.forEach((proj) => {
-          seenIds.add(proj.id)
           const key = `insightflow_project_files_${proj.id}`
           const cached = JSON.parse(localStorage.getItem(key) || '[]')
           if (Array.isArray(cached)) {
@@ -90,36 +94,14 @@ export default function AnalyticsPage() {
           }
         })
 
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i)
-          if (k && k.startsWith('insightflow_project_files_')) {
-            const pId = k.replace('insightflow_project_files_', '')
-            if (!seenIds.has(pId)) {
-              const cached = JSON.parse(localStorage.getItem(k) || '[]')
-              if (Array.isArray(cached)) {
-                cached.forEach((ds: any) => {
-                  collected.push({
-                    projectId: pId,
-                    projectName: 'مشروع تحليل البيانات',
-                    datasetId: ds.id,
-                    fileName: ds.name,
-                    rowCount: ds.rowCount ?? 0,
-                    columnCount: ds.columnCount ?? 0,
-                    uploadedAt: ds.uploadedAt || new Date().toISOString(),
-                    insights: ds.insights || [],
-                  })
-                })
-              }
-            }
-          }
-        }
-
         collected.sort(
           (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
         )
         setDatasets(collected)
         if (collected.length > 0) {
           setSelectedDatasetId(collected[0].datasetId)
+        } else {
+          setSelectedDatasetId('')
         }
       } catch (err) {
         console.error('Failed to load analytics data:', err)
@@ -129,7 +111,7 @@ export default function AnalyticsPage() {
     }
 
     loadAnalyticsWorkspace()
-  }, [])
+  }, [activeWorkspaceId, roleLoading])
 
   const activeItem = useMemo(
     () => datasets.find((d) => d.datasetId === selectedDatasetId) || datasets[0],
