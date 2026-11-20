@@ -10,6 +10,7 @@ import {
   ArrowUpRight,
   Loader2,
   RotateCcw,
+  Globe,
 } from 'lucide-react'
 import { useTranslation } from '@/lib/i18n'
 import { apiRequest, getSession } from '@/lib/api'
@@ -43,6 +44,7 @@ type ChatMessage = {
   id: string
   sender: 'ai' | 'user'
   text: string
+  sources?: Array<{ title: string; url: string }>
 }
 
 export function RightSidebar() {
@@ -178,8 +180,8 @@ export function RightSidebar() {
         const totalRows = collectedDatasets.reduce((sum, d) => sum + d.rowCount, 0)
         const introText =
           collectedDatasets.length > 0
-            ? `مرحباً! أراقب حالياً "${activeWorkspace?.name || 'القسم النشط'}" (${projList.length} مشاريع، ${collectedDatasets.length} ملفات، ${totalRows.toLocaleString()} سجل). اسألني عن أي ملف أو مشروع أو اطلب تحليلاً فورياً.`
-            : `مرحباً! القسم "${activeWorkspace?.name || 'الحالي'}" جاهز للتحليل. ارفع ملف Excel أو CSV لأي مشروع وسأستخرج لك أهم المؤشرات والتوصيات فوراً.`
+            ? `أهلاً بك! أتابع معك قسم "${activeWorkspace?.name || 'القسم النشط'}" (${projList.length} مشاريع، ${collectedDatasets.length} ملفات، ${totalRows.toLocaleString()} سجل). اسألني عن تحليل بياناتك أو أي معلومة من السوق والإنترنت.`
+            : `أهلاً بك! قسم "${activeWorkspace?.name || 'الحالي'}" جاهز. اسألني أي سؤال تحليلي أو ارفع ملف بيانات وسأساعدك فوراً.`
 
         setMessages([{ id: 'welcome', sender: 'ai', text: introText }])
       } catch (err) {
@@ -194,13 +196,13 @@ export function RightSidebar() {
 
   const smartSuggestions = useMemo(() => {
     if (datasets.length === 0) {
-      return ['كيف أبدأ بتحليل بياناتي؟', 'ما هي صيغ الملفات المدعومة؟']
+      return ['أهم مؤشرات الأداء KPIs للشركات', 'كيف أحلل بيانات المبيعات باحتراف؟']
     }
     const latestFile = datasets[datasets.length - 1]
     return [
-      `لخّص أهم نتائج ملف ${latestFile.fileName}`,
-      'ما هي أبرز الاتجاهات والفروق في القسم؟',
-      'حدّث التحليل بالذكاء الاصطناعي',
+      `ماذا نستنتج من ملف ${latestFile.fileName}؟`,
+      'اقترح خطة عمل لتحسين أداء مشاريع القسم',
+      'أحدث اتجاهات تحليل البيانات في 2026',
     ]
   }, [datasets])
 
@@ -258,166 +260,64 @@ export function RightSidebar() {
     return list.slice(0, 3)
   }, [emptyProjectsCount, datasets.length, recentReports.length, membersCount, canAnalyzeAndUpload, canManageTeam])
 
-  // دالة مساعدة لجلب رؤى الذكاء الاصطناعي الحقيقية من الباك إند لملف معين
-  async function fetchLiveInsightsForDataset(ds: WorkspaceDatasetSummary) {
-    if (ds.insights && ds.insights.length > 0) {
-      return ds.insights
-    }
-
-    const res = await apiRequest<any>(
-      `/api/analytics/datasets/${ds.datasetId}/insights`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          metrics: [],
-          groupBy: [],
-          filters: [],
-          comparisons: [],
-        }),
-      }
-    ).catch(() => null)
-
-    const rawList: any[] = res?.insights || res?.Insights || []
-    const mapped = rawList.map((item: any) => ({
-      title: item.title || item.Title || 'ملاحظة تحليلية',
-      description: item.description || item.Description || item.message || '',
-    }))
-
-    if (mapped.length > 0) {
-      setDatasets((prev) =>
-        prev.map((item) =>
-          item.datasetId === ds.datasetId ? { ...item, insights: mapped } : item
-        )
-      )
-    }
-
-    return mapped
-  }
-
   async function handleSendQuestion(questionText?: string) {
     const q = (questionText ?? inputValue).trim()
     if (!q || isThinking) return
 
     setInputValue('')
     const userMsg: ChatMessage = { id: `u-${Date.now()}`, sender: 'user', text: q }
-    setMessages((prev) => [...prev, userMsg])
+    const updatedMessages = [...messages, userMsg]
+    setMessages(updatedMessages)
     setIsThinking(true)
 
     try {
-      const latestDs = datasets[datasets.length - 1]
-      let reply = ''
+      const workspaceContext = {
+        workspaceName: activeWorkspace?.name || 'القسم النشط',
+        projectsCount: projects.length,
+        membersCount,
+        projects: projects.map((p) => p.name),
+        files: datasets.map((d) => ({
+          fileName: d.fileName,
+          projectName: d.projectName,
+          rowCount: d.rowCount,
+          columnCount: d.columnCount,
+          extractedInsights: d.insights,
+        })),
+      }
 
-      if (!latestDs) {
-        if (q.includes('صيغ')) {
-          reply =
-            'تدعم المنصة ملفات Excel (.xlsx, .xls) وملفات CSV. يمكنك رفعها من صفحة "رفع ملف بيانات" ليتم تحليلها تلقائياً.'
-        } else {
-          reply =
-            'لا توجد ملفات مرفوعة في هذا القسم حتى الآن. ارفع ملف بيانات لأحد مشاريعك وسأقوم بتحليله وتلخيص نتائجه فوراً.'
-        }
-      } else if (q.includes('حدّث') || q.includes('تحديث') || q.includes('ذكاء')) {
-        // إجبار إعادة استدعاء محرك الذكاء الاصطناعي من الباك إند
-        const res = await apiRequest<any>(
-          `/api/analytics/datasets/${latestDs.datasetId}/insights`,
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              metrics: [],
-              groupBy: [],
-              filters: [],
-              comparisons: [],
-            }),
-          }
-        ).catch(() => null)
+      const res = await fetch('/api/copilot/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: q,
+          history: updatedMessages,
+          workspaceContext,
+        }),
+      })
 
-        const rawList: any[] = res?.insights || res?.Insights || []
-        const fresh = rawList.map((item: any) => ({
-          title: item.title || item.Title || 'ملاحظة تحليلية',
-          description: item.description || item.Description || '',
-        }))
+      const data = await res.json()
 
-        if (fresh.length > 0) {
-          setDatasets((prev) =>
-            prev.map((item) =>
-              item.datasetId === latestDs.datasetId ? { ...item, insights: fresh } : item
-            )
-          )
-          reply = `تم تحديث التحليل الذكي لملف "${latestDs.fileName}":\n• ${fresh
-            .slice(0, 3)
-            .map((i) => `${i.title}: ${i.description}`)
-            .join('\n• ')}`
-        } else {
-          reply = `تم فحص ملف "${latestDs.fileName}" (${latestDs.rowCount.toLocaleString()} صف × ${latestDs.columnCount} عمود). افتح مركز التحليلات لتحديد الأعمدة والمقاييس المراد تحليلها.`
-        }
-      } else if (q.includes('لخّص') || q.includes('نتائج') || q.includes('ملخص')) {
-        // البحث عن الملف المذكور في السؤال أو استخدام أحدث ملف
-        const targetDs =
-          datasets.find((d) => q.toLowerCase().includes(d.fileName.toLowerCase())) || latestDs
-        const liveInsights = await fetchLiveInsightsForDataset(targetDs)
-
-        if (liveInsights.length > 0) {
-          reply = `ملخص نتائج ملف "${targetDs.fileName}" (${targetDs.rowCount.toLocaleString()} سجل و ${targetDs.columnCount} أعمدة):\n• ${liveInsights
-            .slice(0, 3)
-            .map((i) => `${i.title}: ${i.description}`)
-            .join('\n• ')}`
-        } else {
-          reply = `ملف "${targetDs.fileName}" تابع لمشروع "${targetDs.projectName}"، ويحتوي على ${targetDs.rowCount.toLocaleString()} صف و ${targetDs.columnCount} أعمدة وهو جاهز لعرض الرسوم البيانية في لوحة المشروع.`
-        }
-      } else if (q.includes('اتجاهات') || q.includes('فروق') || q.includes('مقارن')) {
-        const liveInsights = await fetchLiveInsightsForDataset(latestDs)
-        const byProject = projects.map((p) => {
-          const pFiles = datasets.filter((d) => d.projectId === p.id)
-          const pRows = pFiles.reduce((s, f) => s + f.rowCount, 0)
-          return `${p.name}: ${pFiles.length} ملف (${pRows.toLocaleString()} سجل)`
-        })
-
-        reply = `مقارنة وتوزيع البيانات عبر مشاريع القسم:\n• ${byProject.join('\n• ')}${
-          liveInsights.length > 0
-            ? `\n\nأبرز اتجاه مكتشف في "${latestDs.fileName}":\n• ${liveInsights[0].title}: ${liveInsights[0].description}`
-            : ''
-        }`
-      } else if (q.includes('مشاريع') || q.includes('مشروع')) {
-        reply = `يحتوي هذا القسم على ${projects.length} مشاريع:\n• ${projects
-          .map((p) => {
-            const count = datasets.filter((d) => d.projectId === p.id).length
-            return `${p.name} (${count} ملفات)`
-          })
-          .join('\n• ')}`
-      } else if (q.includes('ملف') || q.includes('ملفات')) {
-        const topFiles = datasets.slice(-5).reverse()
-        reply = `أحدث الملفات المرفوعة في القسم (${datasets.length} إجمالاً):\n• ${topFiles
-          .map((f) => `${f.fileName} (${f.rowCount.toLocaleString()} صف) — مشروع ${f.projectName}`)
-          .join('\n• ')}`
-      } else {
-        // لأي سؤال حر يكتبه المستخدم: نبحث في الرؤى الحية من السيرفر
-        const liveInsights = await fetchLiveInsightsForDataset(latestDs)
-        const keywords = q.split(/\s+/).filter((w) => w.length > 2)
-        const matched = liveInsights.filter((ins) =>
-          keywords.some(
-            (kw) =>
-              ins.title.toLowerCase().includes(kw.toLowerCase()) ||
-              ins.description.toLowerCase().includes(kw.toLowerCase())
-          )
-        )
-
-        if (matched.length > 0) {
-          reply = `إليك ما وجدته بخصوص سؤالك في "${latestDs.fileName}":\n• ${matched
-            .slice(0, 3)
-            .map((m) => `${m.title}: ${m.description}`)
-            .join('\n• ')}`
-        } else if (liveInsights.length > 0) {
-          reply = `بناءً على تحليل أحدث بيانات القسم ("${latestDs.fileName}"):\n• ${liveInsights
-            .slice(0, 2)
-            .map((m) => `${m.title}: ${m.description}`)
-            .join('\n• ')}\n\nيمكنك أيضاً فتح "مركز التحليلات" لتصفية الأعمدة بدقة.`
-        } else {
-          reply = `تم التحقق من "${latestDs.fileName}" (${latestDs.rowCount.toLocaleString()} سجل). لطرح استعلامات تفصيلية على أعمدة محددة، انتقل إلى صفحة "التحليلات" واختر المقاييس المطلوبة.`
-        }
+      if (!res.ok) {
+        throw new Error(data?.error || 'فشل الاتصال بالمساعد الذكي')
       }
 
       setMessages((prev) => [
         ...prev,
-        { id: `ai-${Date.now()}`, sender: 'ai', text: reply },
+        {
+          id: `ai-${Date.now()}`,
+          sender: 'ai',
+          text: data.reply,
+          sources: data.sources || [],
+        },
+      ])
+    } catch (err: any) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `err-${Date.now()}`,
+          sender: 'ai',
+          text: `عذراً، تعذر الحصول على إجابة حالياً: ${err?.message || 'تحقق من إعداد مفتاح API'}`,
+        },
       ])
     } finally {
       setIsThinking(false)
@@ -437,7 +337,7 @@ export function RightSidebar() {
               <p className="text-sm font-semibold">{t.aiAssistant || 'المساعد الذكي'}</p>
               <p className="flex items-center gap-1 text-xs text-muted-foreground">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{' '}
-                {dataLoading ? 'جاري المزامنة...' : t.online || 'متصل ببيانات القسم'}
+                {dataLoading ? 'جاري المزامنة...' : 'متصل • مدعوم بالبحث الحي'}
               </p>
             </div>
           </div>
@@ -453,23 +353,44 @@ export function RightSidebar() {
         </div>
 
         <div className="space-y-3 p-4">
-          <div className="max-h-56 space-y-2.5 overflow-y-auto pe-1">
+          <div className="max-h-72 space-y-2.5 overflow-y-auto pe-1">
             {messages.map((msg) => (
               <div
                 key={msg.id}
                 className={`whitespace-pre-line rounded-xl p-3 text-xs leading-relaxed ${
                   msg.sender === 'ai'
                     ? 'rounded-ss-sm bg-secondary text-foreground'
-                    : 'rounded-ee-sm bg-primary/20 text-foreground border border-primary/30'
+                    : 'rounded-ee-sm border border-primary/30 bg-primary/20 text-foreground'
                 }`}
               >
-                {msg.text}
+                <p>{msg.text}</p>
+
+                {msg.sources && msg.sources.length > 0 && (
+                  <div className="mt-2.5 border-t border-border/60 pt-2">
+                    <p className="mb-1 flex items-center gap-1 text-[10px] font-semibold text-muted-foreground">
+                      <Globe className="h-3 w-3 text-primary" /> المصادر:
+                    </p>
+                    <div className="flex flex-col gap-1">
+                      {msg.sources.map((src, i) => (
+                        <a
+                          key={i}
+                          href={src.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="truncate text-[10px] text-primary hover:underline"
+                        >
+                          • {src.title}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
             {isThinking && (
               <div className="flex items-center gap-2 rounded-xl bg-secondary p-3 text-xs text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                جاري تحليل بيانات القسم...
+                جاري التحليل والبحث في المصادر...
               </div>
             )}
           </div>
@@ -498,7 +419,7 @@ export function RightSidebar() {
             <input
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              placeholder={t.askAnythingData || 'اسأل أي شيء عن بياناتك...'}
+              placeholder={t.askAnythingData || 'اسأل عن بياناتك أو ابحث في الإنترنت...'}
               className="h-10 w-full rounded-xl border border-border bg-background/60 ps-3.5 pe-10 text-xs placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
             <button
