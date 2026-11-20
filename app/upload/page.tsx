@@ -13,9 +13,12 @@ import {
   Plus,
   FolderPlus,
   Download,
+  Lock,
 } from 'lucide-react'
+import Link from 'next/link'
 import { apiRequest, ApiError, API_BASE_URL, TOKEN_KEY, getLang } from '@/lib/api'
 import { useTranslation } from '@/lib/i18n'
+import { useWorkspaceRole } from '@/lib/useWorkspaceRole'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
 
 type FileStatus = 'uploading' | 'processing' | 'success' | 'error'
@@ -53,6 +56,7 @@ function formatSize(bytes: number) {
 
 export default function UploadPage() {
   const { t } = useTranslation()
+  const { canAnalyzeAndUpload, loading: roleLoading } = useWorkspaceRole()
   const [dragging, setDragging] = useState(false)
   const [files, setFiles] = useState<UploadFile[]>([])
   const [workspaceId, setWorkspaceId] = useState<string>('')
@@ -90,7 +94,7 @@ export default function UploadPage() {
 
   async function handleCreateProject(e: React.FormEvent) {
     e.preventDefault()
-    if (!workspaceId || !newProjectName.trim()) return
+    if (!canAnalyzeAndUpload || !workspaceId || !newProjectName.trim()) return
     setCreatingProject(true)
     try {
       const created = await apiRequest<any>(`/api/workspaces/${workspaceId}/projects`, {
@@ -115,6 +119,7 @@ export default function UploadPage() {
 
   const processSingleFile = useCallback(
     async (f: File, itemId: string) => {
+      if (!canAnalyzeAndUpload) return
       if (!selectedProjectId) {
         setFiles((prev) =>
           prev.map((x) =>
@@ -219,12 +224,12 @@ export default function UploadPage() {
         )
       }
     },
-    [selectedProjectId]
+    [selectedProjectId, canAnalyzeAndUpload]
   )
 
   const addFiles = useCallback(
     (incoming: FileList | null) => {
-      if (!incoming) return
+      if (!incoming || !canAnalyzeAndUpload) return
       Array.from(incoming).forEach((f) => {
         const type = ext(f.name)
         const id = `${f.name}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
@@ -266,7 +271,7 @@ export default function UploadPage() {
         processSingleFile(f, id)
       })
     },
-    [processSingleFile]
+    [processSingleFile, canAnalyzeAndUpload]
   )
 
   async function handleExportReport(format: 'pdf' | 'excel', fileItem: UploadFile) {
@@ -314,6 +319,38 @@ export default function UploadPage() {
 
   const removeFile = (id: string) => setFiles((prev) => prev.filter((f) => f.id !== id))
   const latestSuccess = files.find((f) => f.status === 'success')
+
+  if (!roleLoading && !canAnalyzeAndUpload) {
+    return (
+      <DashboardShell activeItem="dataFiles">
+        <div className="mx-auto flex max-w-3xl flex-col items-center justify-center gap-4 p-10 text-center">
+          <div className="rounded-2xl border border-amber-500/30 bg-card/60 p-8">
+            <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-400">
+              <Lock className="h-7 w-7" />
+            </span>
+            <h1 className="text-xl font-bold">صلاحية مشاهدة فقط (Viewer)</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              حسابك مقيّد بصلاحية المشاهدة فقط داخل هذه المساحة؛ لا يمكنك إنشاء مشاريع جديدة أو رفع وتحليل الملفات.
+            </p>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              <Link
+                href="/analytics"
+                className="rounded-xl bg-primary px-5 py-2.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+              >
+                استعراض التحليلات الحالية
+              </Link>
+              <Link
+                href="/dashboard"
+                className="rounded-xl border border-border bg-secondary px-5 py-2.5 text-xs font-semibold hover:bg-secondary/80"
+              >
+                العودة للوحة التحكم
+              </Link>
+            </div>
+          </div>
+        </div>
+      </DashboardShell>
+    )
+  }
 
   return (
     <DashboardShell activeItem="dataFiles">

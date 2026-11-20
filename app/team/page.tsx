@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
 import { apiRequest, getSession } from '@/lib/api'
+import { useWorkspaceRole } from '@/lib/useWorkspaceRole'
 import {
   Users,
   UserPlus,
@@ -15,6 +16,7 @@ import {
   Search,
   Building2,
   Loader2,
+  Lock,
 } from 'lucide-react'
 
 type TeamMember = {
@@ -34,6 +36,8 @@ const ROLE_LABELS: Record<TeamMember['role'], { label: string; color: string }> 
 }
 
 export default function TeamPage() {
+  const { canManageTeam, loading: roleLoading } = useWorkspaceRole()
+
   const [workspaceName, setWorkspaceName] = useState('Acme Analytics')
   const [workspaceId, setWorkspaceId] = useState<string>('')
   const [members, setMembers] = useState<TeamMember[]>([])
@@ -121,7 +125,7 @@ export default function TeamPage() {
 
   async function handleInviteMember(e: React.FormEvent) {
     e.preventDefault()
-    if (!inviteEmail.trim()) return
+    if (!canManageTeam || !inviteEmail.trim()) return
     setInviting(true)
     setInviteSuccess('')
     setInviteError('')
@@ -170,11 +174,13 @@ export default function TeamPage() {
   }
 
   function handleRoleChange(memberId: string, newRole: TeamMember['role']) {
+    if (!canManageTeam) return
     const updated = members.map((m) => (m.id === memberId ? { ...m, role: newRole } : m))
     persistMembers(updated)
   }
 
   function handleRemoveMember(memberId: string) {
+    if (!canManageTeam) return
     const updated = members.filter((m) => m.id !== memberId)
     persistMembers(updated)
   }
@@ -213,73 +219,82 @@ export default function TeamPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-border bg-card/50 p-6">
-          <div className="mb-4 flex items-center gap-2">
-            <UserPlus className="h-5 w-5 text-primary" />
-            <h2 className="text-base font-bold">دعوة عضو جديد عبر البريد الإلكتروني</h2>
+        {!roleLoading && canManageTeam ? (
+          <div className="rounded-2xl border border-border bg-card/50 p-6">
+            <div className="mb-4 flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-primary" />
+              <h2 className="text-base font-bold">دعوة عضو جديد عبر البريد الإلكتروني</h2>
+            </div>
+
+            <form onSubmit={handleInviteMember} className="grid grid-cols-1 gap-3 sm:grid-cols-12">
+              <div className="sm:col-span-4">
+                <input
+                  type="text"
+                  value={inviteName}
+                  onChange={(e) => setInviteName(e.target.value)}
+                  placeholder="اسم العضو (اختياري)..."
+                  className="h-10 w-full rounded-xl border border-input bg-secondary/50 px-3.5 text-sm outline-none focus:border-primary"
+                />
+              </div>
+
+              <div className="relative sm:col-span-4">
+                <Mail className="pointer-events-none absolute top-3 right-3.5 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="email"
+                  required
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="البريد الإلكتروني للعضو..."
+                  className="h-10 w-full rounded-xl border border-input bg-secondary/50 pr-10 pl-3.5 text-sm outline-none focus:border-primary"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <select
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value as TeamMember['role'])}
+                  className="h-10 w-full rounded-xl border border-input bg-secondary/50 px-3 text-xs font-medium outline-none focus:border-primary"
+                >
+                  <option value="Admin" className="bg-slate-900">مدير (Admin)</option>
+                  <option value="Analyst" className="bg-slate-900">محلل بيانات (Analyst)</option>
+                  <option value="Viewer" className="bg-slate-900">مشاهد فقط (Viewer)</option>
+                </select>
+              </div>
+
+              <div className="sm:col-span-2">
+                <button
+                  type="submit"
+                  disabled={inviting || !inviteEmail.trim()}
+                  className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                  إرسال دعوة
+                </button>
+              </div>
+            </form>
+
+            {inviteSuccess && (
+              <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-emerald-400">
+                <CheckCircle2 className="h-4 w-4" />
+                {inviteSuccess}
+              </p>
+            )}
+
+            {inviteError && (
+              <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-red-400">
+                <AlertCircle className="h-4 w-4" />
+                {inviteError}
+              </p>
+            )}
           </div>
-
-          <form onSubmit={handleInviteMember} className="grid grid-cols-1 gap-3 sm:grid-cols-12">
-            <div className="sm:col-span-4">
-              <input
-                type="text"
-                value={inviteName}
-                onChange={(e) => setInviteName(e.target.value)}
-                placeholder="اسم العضو (اختياري)..."
-                className="h-10 w-full rounded-xl border border-input bg-secondary/50 px-3.5 text-sm outline-none focus:border-primary"
-              />
-            </div>
-
-            <div className="relative sm:col-span-4">
-              <Mail className="pointer-events-none absolute top-3 right-3.5 h-4 w-4 text-muted-foreground" />
-              <input
-                type="email"
-                required
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="البريد الإلكتروني للعضو..."
-                className="h-10 w-full rounded-xl border border-input bg-secondary/50 pr-10 pl-3.5 text-sm outline-none focus:border-primary"
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <select
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value as TeamMember['role'])}
-                className="h-10 w-full rounded-xl border border-input bg-secondary/50 px-3 text-xs font-medium outline-none focus:border-primary"
-              >
-                <option value="Admin" className="bg-slate-900">مدير (Admin)</option>
-                <option value="Analyst" className="bg-slate-900">محلل بيانات (Analyst)</option>
-                <option value="Viewer" className="bg-slate-900">مشاهد فقط (Viewer)</option>
-              </select>
-            </div>
-
-            <div className="sm:col-span-2">
-              <button
-                type="submit"
-                disabled={inviting || !inviteEmail.trim()}
-                className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-50"
-              >
-                {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-                إرسال دعوة
-              </button>
-            </div>
-          </form>
-
-          {inviteSuccess && (
-            <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-emerald-400">
-              <CheckCircle2 className="h-4 w-4" />
-              {inviteSuccess}
-            </p>
-          )}
-
-          {inviteError && (
-            <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-red-400">
-              <AlertCircle className="h-4 w-4" />
-              {inviteError}
-            </p>
-          )}
-        </div>
+        ) : !roleLoading ? (
+          <div className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200">
+            <Lock className="h-4 w-4 shrink-0 text-amber-400" />
+            <span>
+              إرسال الدعوات وتعديل صلاحيات الأعضاء متاح لمالك مساحة العمل (Owner) ومدير النظام (Admin) فقط.
+            </span>
+          </div>
+        ) : null}
 
         <div className="rounded-2xl border border-border bg-card/50 p-6">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -335,8 +350,10 @@ export default function TeamPage() {
                   </div>
 
                   <div className="flex items-center gap-3">
-                    {member.role === 'Owner' ? (
-                      <span className={`inline-flex items-center gap-1 rounded-xl border px-3 py-1.5 text-xs font-semibold ${roleBadge.color}`}>
+                    {member.role === 'Owner' || !canManageTeam ? (
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-xl border px-3 py-1.5 text-xs font-semibold ${roleBadge.color}`}
+                      >
                         <Shield className="h-3.5 w-3.5" />
                         {roleBadge.label}
                       </span>

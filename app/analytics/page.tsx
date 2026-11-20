@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
 import { apiRequest } from '@/lib/api'
+import { useWorkspaceRole } from '@/lib/useWorkspaceRole'
 import {
   BarChart3,
   Layers,
@@ -30,6 +31,7 @@ type AnalyticsDatasetItem = {
 }
 
 export default function AnalyticsPage() {
+  const { canAnalyzeAndUpload } = useWorkspaceRole()
   const [datasets, setDatasets] = useState<AnalyticsDatasetItem[]>([])
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('')
   const [loading, setLoading] = useState(true)
@@ -144,9 +146,8 @@ export default function AnalyticsPage() {
     [datasets]
   )
 
-  // إعادة تشغيل محرك التحليل بالذكاء الاصطناعي للملف المحدد
   async function handleRefreshInsights() {
-    if (!activeItem?.datasetId) return
+    if (!canAnalyzeAndUpload || !activeItem?.datasetId) return
     setReanalyzing(true)
     try {
       const insightsRes = await apiRequest<any>(
@@ -199,13 +200,15 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          <Link
-            href="/upload"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-medium text-primary-foreground shadow hover:bg-primary/90"
-          >
-            <Upload className="h-3.5 w-3.5" />
-            إضافة مصدر بيانات جديد
-          </Link>
+          {canAnalyzeAndUpload && (
+            <Link
+              href="/upload"
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-medium text-primary-foreground shadow hover:bg-primary/90"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              إضافة مصدر بيانات جديد
+            </Link>
+          )}
         </div>
 
         {/* Workspace-Wide KPIs */}
@@ -311,19 +314,21 @@ export default function AnalyticsPage() {
             <div className="rounded-2xl border border-border bg-card/50 p-6 lg:col-span-7">
               <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={reanalyzing}
-                    onClick={handleRefreshInsights}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-secondary px-3 py-1.5 text-xs font-medium hover:bg-secondary/80 disabled:opacity-50"
-                  >
-                    {reanalyzing ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                    ) : (
-                      <RefreshCw className="h-3.5 w-3.5 text-primary" />
-                    )}
-                    تحديث التحليل
-                  </button>
+                  {canAnalyzeAndUpload && (
+                    <button
+                      type="button"
+                      disabled={reanalyzing}
+                      onClick={handleRefreshInsights}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-secondary px-3 py-1.5 text-xs font-medium hover:bg-secondary/80 disabled:opacity-50"
+                    >
+                      {reanalyzing ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                      ) : (
+                        <RefreshCw className="h-3.5 w-3.5 text-primary" />
+                      )}
+                      تحديث التحليل
+                    </button>
+                  )}
                   <Link
                     href={`/projects/${activeItem.projectId}`}
                     className="inline-flex items-center gap-1 rounded-xl bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/25"
@@ -366,14 +371,18 @@ export default function AnalyticsPage() {
             <BarChart3 className="mx-auto mb-3 h-10 w-10 text-primary/60" />
             <h3 className="text-base font-bold">لا توجد بيانات متاحة للتحليل بعد</h3>
             <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
-              قم برفع ملف Excel أو CSV أولاً لتظهر هنا المقارنات الإحصائية الشاملة عبر جميع مشاريعك.
+              {canAnalyzeAndUpload
+                ? 'قم برفع ملف Excel أو CSV أولاً لتظهر هنا المقارنات الإحصائية الشاملة عبر جميع مشاريعك.'
+                : 'لم يقم فريق العمل برفع أي ملفات بيانات للعرض في هذه المساحة بعد.'}
             </p>
-            <Link
-              href="/upload"
-              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-medium text-primary-foreground shadow hover:bg-primary/90"
-            >
-              رفع ملف الآن
-            </Link>
+            {canAnalyzeAndUpload && (
+              <Link
+                href="/upload"
+                className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-medium text-primary-foreground shadow hover:bg-primary/90"
+              >
+                رفع ملف الآن
+              </Link>
+            )}
           </div>
         )}
       </div>
