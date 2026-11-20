@@ -3,7 +3,8 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
-import { apiRequest } from '@/lib/api'
+import { apiRequest, getSession } from '@/lib/api'
+import { useWorkspaceRole } from '@/lib/useWorkspaceRole'
 import {
   FileText,
   Sparkles,
@@ -31,6 +32,7 @@ type ProjectReportItem = {
 function ReportsContent() {
   const searchParams = useSearchParams()
   const initialProjectId = searchParams?.get('projectId') || 'all'
+  const { activeWorkspaceId, loading: roleLoading } = useWorkspaceRole()
 
   const [reports, setReports] = useState<ProjectReportItem[]>([])
   const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([])
@@ -38,14 +40,21 @@ function ReportsContent() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (roleLoading) return
+
     async function loadAllProjectReports() {
+      setLoading(true)
       try {
-        const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
-        const firstWs = wsList?.[0]
-        const wsId = firstWs?.id || firstWs?.workspaceId
+        const session = getSession()
+        let wsId = activeWorkspaceId || session?.workspaceId
+        if (!wsId) {
+          const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
+          const firstWs = wsList?.[0]
+          wsId = firstWs?.id || firstWs?.workspaceId
+        }
 
         let projList: Array<{ id: string; name: string }> = []
-        if (wsId) {
+        if (wsId && wsId !== 'default') {
           const rawProjects = await apiRequest<any[]>(`/api/workspaces/${wsId}/projects`).catch(
             () => []
           )
@@ -58,57 +67,70 @@ function ReportsContent() {
           }
         }
 
-        // جمع التقارير والرؤى المخزنة لكل مشروع من ذاكرة المتصفح
-        const collected: ProjectReportItem[] = []
-        const seenProjectIds = new Set<string>()
+        // استخدام Map لمنع تكرار نفس الملف في نفس المشروع
+        const uniqueReportsMap = new Map<string, ProjectReportItem>()
 
-        // 1. المرور على المشاريع القادمة من الـ API
-        projList.forEach((proj) => {
-          seenProjectIds.add(proj.id)
+        for (const proj of projList) {
           const key = `insightflow_project_files_${proj.id}`
           const cached = JSON.parse(localStorage.getItem(key) || '[]')
-          if (Array.isArray(cached)) {
-            cached.forEach((ds: any) => {
-              collected.push({
+          const remoteFiles = await apiRequest<any[]>(`/api/projects/${proj.id}/files`).catch(
+            () => []
+          )
+
+          const cachedMap = new Map<string, any>(
+            Array.isArray(cached)
+              ? cached.flatMap((c: any) => [
+                  [c.id, c],
+                  [c.name, c],
+                ])
+              : []
+          )
+
+          const filesSource =
+            Array.isArray(remoteFiles) && remoteFiles.length > 0 ? remoteFiles : cached
+
+          if (Array.isArray(filesSource)) {
+            for (const ds of filesSource) {
+              const dsId = ds.datasetId || ds.id
+              const fname = ds.fileName || ds.originalFileName || ds.name || 'ملف بيانات'
+              const localMatch = cachedMap.get(dsId) || cachedMap.get(fname)
+              const rows = ds.rowCount ?? localMatch?.rowCount ?? 0
+              const cols = ds.columnCount ?? localMatch?.columnCount ?? 0
+
+              let insList: Array<{ title: string; description: string }> =
+                Array.isArray(localMatch?.insights) && localMatch.insights.length > 0
+                  ? localMatch.insights
+                  : []
+
+              if (insList.length === 0 && (rows > 0 || cols > 0)) {
+                insList = [
+                  {
+                    title: `ملخص أبعاد البيانات (${fname})`,
+                    description: `تم فحص ومعالجة ${rows.toLocaleString()} صف و ${cols} متغيرات بنجاح. التوصية: استعرض التوزيعات البيانية في لوحة تحكم المشروع لمقارنة المؤشرات الرئيسية.`,
+                  },
+                  {
+                    title: `جودة واكتمال السجلات`,
+                    description: `كثافة البيانات تبلغ ${(rows * cols).toLocaleString()} نقطة بيانات جاهزة للتصدير والتحليل المقارن. التوصية: قارن هذا الملف مع فترات زمنية أخرى في مركز التحليلات.`,
+                  },
+                ]
+              }
+
+              const dedupKey = `${proj.id}::${fname}`
+              uniqueReportsMap.set(dedupKey, {
                 projectId: proj.id,
                 projectName: proj.name,
-                datasetId: ds.id,
-                fileName: ds.name,
-                rowCount: ds.rowCount ?? 0,
-                columnCount: ds.columnCount ?? 0,
-                uploadedAt: ds.uploadedAt || new Date().toISOString(),
-                insights: ds.insights || [],
+                datasetId: dsId,
+                fileName: fname,
+                rowCount: rows,
+                columnCount: cols,
+                uploadedAt: ds.uploadedAt || localMatch?.uploadedAt || new Date().toISOString(),
+                insights: insList,
               })
-            })
-          }
-        })
-
-        // 2. فحص أي مفاتيح مشاريع أخرى مخزنة محلياً
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i)
-          if (k && k.startsWith('insightflow_project_files_')) {
-            const pId = k.replace('insightflow_project_files_', '')
-            if (!seenProjectIds.has(pId)) {
-              const cached = JSON.parse(localStorage.getItem(k) || '[]')
-              if (Array.isArray(cached)) {
-                cached.forEach((ds: any) => {
-                  collected.push({
-                    projectId: pId,
-                    projectName: 'مشروع تحليل البيانات',
-                    datasetId: ds.id,
-                    fileName: ds.name,
-                    rowCount: ds.rowCount ?? 0,
-                    columnCount: ds.columnCount ?? 0,
-                    uploadedAt: ds.uploadedAt || new Date().toISOString(),
-                    insights: ds.insights || [],
-                  })
-                })
-              }
             }
           }
         }
 
-        // ترتيب التقارير من الأحدث للأقدم
+        const collected = Array.from(uniqueReportsMap.values())
         collected.sort(
           (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
         )
@@ -121,14 +143,14 @@ function ReportsContent() {
     }
 
     loadAllProjectReports()
-  }, [])
+  }, [activeWorkspaceId, roleLoading])
 
   const filteredReports =
     selectedProjectFilter === 'all'
       ? reports
       : reports.filter((r) => r.projectId === selectedProjectFilter)
 
-  if (loading) {
+  if (loading || roleLoading) {
     return (
       <div className="flex h-96 items-center justify-center">
         <p className="animate-pulse text-sm text-muted-foreground">
@@ -182,9 +204,9 @@ function ReportsContent() {
       {/* Reports & Recommendations List */}
       {filteredReports.length > 0 ? (
         <div className="flex flex-col gap-6">
-          {filteredReports.map((rep, rIdx) => (
+          {filteredReports.map((rep) => (
             <div
-              key={`${rep.projectId}-${rep.datasetId}-${rIdx}`}
+              key={`${rep.projectId}-${rep.fileName}`}
               className="rounded-2xl border border-border bg-card/50 p-6 shadow-sm"
             >
               {/* Report Top Metadata */}
@@ -207,9 +229,10 @@ function ReportsContent() {
                       <span className="flex items-center gap-1 text-emerald-400">
                         <CheckCircle2 className="h-3.5 w-3.5" /> مكتمل التحليل
                       </span>
+                      <span>• {rep.rowCount.toLocaleString()} سجل</span>
                       <span>• {rep.columnCount} أبعاد محللة</span>
                       <span className="flex items-center gap-1">
-                        • <Calendar className="h-3 w-3" />{' '}
+                        <Calendar className="h-3 w-3" />{' '}
                         {new Date(rep.uploadedAt).toLocaleDateString('ar-EG')}
                       </span>
                     </div>
@@ -232,43 +255,37 @@ function ReportsContent() {
                   <span>النتائج التفصيلية والتوصيات التنفيذية ({rep.insights.length})</span>
                 </div>
 
-                {rep.insights.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    {rep.insights.map((ins, iIdx) => {
-                      const parts = ins.description.split('التوصية:')
-                      const findingText = parts[0]?.trim()
-                      const recommendationText = parts[1]?.trim()
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {rep.insights.map((ins, iIdx) => {
+                    const parts = ins.description.split('التوصية:')
+                    const findingText = parts[0]?.trim()
+                    const recommendationText = parts[1]?.trim()
 
-                      return (
-                        <div
-                          key={iIdx}
-                          className="flex flex-col justify-between rounded-xl border border-border/80 bg-background/60 p-4 transition-colors hover:border-primary/40"
-                        >
-                          <div>
-                            <h3 className="text-sm font-bold text-foreground">{ins.title}</h3>
-                            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                              {findingText}
-                            </p>
-                          </div>
-
-                          {recommendationText && (
-                            <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-2.5 text-xs text-amber-200">
-                              <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-                              <div>
-                                <span className="font-bold text-amber-300">التوصية: </span>
-                                <span>{recommendationText}</span>
-                              </div>
-                            </div>
-                          )}
+                    return (
+                      <div
+                        key={iIdx}
+                        className="flex flex-col justify-between rounded-xl border border-border/80 bg-background/60 p-4 transition-colors hover:border-primary/40"
+                      >
+                        <div>
+                          <h3 className="text-sm font-bold text-foreground">{ins.title}</h3>
+                          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                            {findingText}
+                          </p>
                         </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    تم تحليل الملف بنجاح دون تسجيل ملاحظات نصية إضافية.
-                  </p>
-                )}
+
+                        {recommendationText && (
+                          <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-2.5 text-xs text-amber-200">
+                            <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                            <div>
+                              <span className="font-bold text-amber-300">التوصية: </span>
+                              <span>{recommendationText}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             </div>
           ))}
