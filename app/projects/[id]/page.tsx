@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
 import { apiRequest, getSession } from '@/lib/api'
+import { useWorkspaceRole } from '@/lib/useWorkspaceRole'
 import {
   Database,
   ArrowLeft,
@@ -61,7 +62,8 @@ type SmartVisualWidget =
 
 export default function ProjectDashboardPage() {
   const params = useParams()
-  const projectId = params?.id as string
+  const projectId = (params?.projectId || params?.id) as string
+  const { activeWorkspaceId, canAnalyzeAndUpload, loading: roleLoading } = useWorkspaceRole()
   const [project, setProject] = useState<any>(null)
   const [datasets, setDatasets] = useState<any[]>([])
   const [selectedDatasetIndex, setSelectedDatasetIndex] = useState<number>(0)
@@ -73,14 +75,17 @@ export default function ProjectDashboardPage() {
   } | null>(null)
 
   useEffect(() => {
+    if (roleLoading) return
+
     async function fetchProjectData() {
       if (!projectId) return
+      setLoading(true)
       try {
         const session = getSession()
-        let wsId = session?.workspaceId
+        let wsId = activeWorkspaceId || session?.workspaceId
 
         if (!wsId) {
-          const wsList = await apiRequest<any[]>('/api/workspaces')
+          const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
           const firstWs = wsList?.[0]
           wsId = firstWs?.id || firstWs?.workspaceId
         }
@@ -88,15 +93,56 @@ export default function ProjectDashboardPage() {
         if (wsId) {
           const projRes = await apiRequest<any>(
             `/api/workspaces/${wsId}/projects/${projectId}`
-          )
-          setProject(projRes)
+          ).catch(() => null)
+          if (projRes) setProject(projRes)
         }
 
         const storageKey = `insightflow_project_files_${projectId}`
         const cachedFiles = JSON.parse(localStorage.getItem(storageKey) || '[]')
+
         if (Array.isArray(cachedFiles) && cachedFiles.length > 0) {
           setDatasets(cachedFiles)
           setSelectedDatasetIndex(cachedFiles.length - 1)
+        } else {
+          // جلب الملفات مباشرة من السيرفر إذا لم تكن مخزنة محلياً
+          const remoteFiles = await apiRequest<any[]>(`/api/projects/${projectId}/files`).catch(
+            () => []
+          )
+          if (Array.isArray(remoteFiles) && remoteFiles.length > 0) {
+            const hydrated = await Promise.all(
+              remoteFiles.map(async (rf: any) => {
+                const dsId = rf.datasetId || rf.id
+                let insightsList: any[] = []
+                if (dsId) {
+                  const insRes = await apiRequest<any>(
+                    `/api/analytics/datasets/${dsId}/insights`,
+                    {
+                      method: 'POST',
+                      body: JSON.stringify({
+                        metrics: [],
+                        groupBy: [],
+                        filters: [],
+                        comparisons: [],
+                      }),
+                    }
+                  ).catch(() => null)
+                  insightsList = insRes?.insights || insRes?.Insights || []
+                }
+                return {
+                  id: dsId,
+                  fileId: rf.fileId || rf.id,
+                  name: rf.fileName || rf.originalFileName || rf.name || 'ملف بيانات',
+                  rowCount: rf.rowCount ?? 0,
+                  columnCount: rf.columnCount ?? 0,
+                  insights: insightsList,
+                  uploadedAt: rf.uploadedAt || rf.createdAt || new Date().toISOString(),
+                }
+              })
+            )
+            setDatasets(hydrated)
+            setSelectedDatasetIndex(hydrated.length - 1)
+            localStorage.setItem(storageKey, JSON.stringify(hydrated))
+          }
         }
       } catch (error) {
         console.error('Failed to load project details:', error)
@@ -106,7 +152,7 @@ export default function ProjectDashboardPage() {
     }
 
     fetchProjectData()
-  }, [projectId])
+  }, [projectId, activeWorkspaceId, roleLoading])
 
   const activeDataset = datasets[selectedDatasetIndex]
   const insights: Array<{ title: string; description: string }> = activeDataset?.insights ?? []
@@ -127,7 +173,7 @@ export default function ProjectDashboardPage() {
     return 0
   }, [activeDataset, insights])
 
-  // بناء الرسوم البيانية بناءً على محتوى البيانات الفعلي فقط (بدون بطاقات موثوقية مكررة)
+  // بناء الرسوم البيانية بناءً على محتوى البيانات الفعلي فقط
   const { smartWidgets, businessKpis } = useMemo(() => {
     const widgets: SmartVisualWidget[] = []
     const kpis: Array<{
@@ -151,7 +197,6 @@ export default function ProjectDashboardPage() {
       const title = ins.title || ''
       const desc = ins.description || ''
 
-      // تجاهل بطاقة اكتمال البيانات العامة لعدم تكرارها في الرسوم البيانية
       if (title.includes('اكتمال البيانات')) {
         return
       }
@@ -209,7 +254,7 @@ export default function ProjectDashboardPage() {
         return
       }
 
-      // 2. رؤى التوزيع الفئوي والاستحواذ (مثل الاسكندرية أو المؤهل الدراسي أو الوظيفة)
+      // 2. رؤى التوزيع الفئوي والاستحواذ
       const labelMatch = desc.match(/فئة\s*'([^']+)'/)
       const countMatch = desc.match(/بواقع\s*(\d+)\s*سجل/)
       if (labelMatch && countMatch) {
@@ -243,7 +288,7 @@ export default function ProjectDashboardPage() {
         return
       }
 
-      // 3. أي Insight رقمي آخر (مثل التشتت أو الانحراف أو القيم المتطرفة) يُعرض كـ Bar أفقي خاص بالبيانات
+      // 3. أي Insight رقمي آخر
       const anyNumMatch = desc.match(/([\d.]+)/)
       if (anyNumMatch) {
         const numVal = parseFloat(anyNumMatch[1])
@@ -258,7 +303,6 @@ export default function ProjectDashboardPage() {
       }
     })
 
-    // إضافة رسم بياني أفقي يجمع المؤشرات الإحصائية المستخرجة من البيانات بدلاً من البطاقات المكررة
     if (extractedBarsForDistribution.length > 0) {
       const maxDist = Math.max(...extractedBarsForDistribution.map((b) => b.value), 1)
       widgets.push({
@@ -273,7 +317,6 @@ export default function ProjectDashboardPage() {
       })
     }
 
-    // إضافة منحنى الاتجاه المقارن في الصدارة إذا توفرت سلسلتان أو أكثر
     if (allSeriesPoints.length >= 2) {
       const first = allSeriesPoints[0].actual
       const last = allSeriesPoints[allSeriesPoints.length - 1].actual
@@ -291,7 +334,6 @@ export default function ProjectDashboardPage() {
       })
     }
 
-    // استكمال الـ 4 KPIs بمؤشرات فعلية من بيانات الملف
     if (activeDataset) {
       if (allSeriesPoints.length > 0 && kpis.length < 4) {
         const peak = Math.max(...allSeriesPoints.map((p) => p.actual))
@@ -332,7 +374,7 @@ export default function ProjectDashboardPage() {
     }
   }, [insights, totalRecords, activeDataset])
 
-  if (loading) {
+  if (loading || roleLoading) {
     return (
       <DashboardShell>
         <div className="flex h-96 items-center justify-center">
@@ -392,13 +434,15 @@ export default function ProjectDashboardPage() {
               التقارير والتوصيات
               <ArrowUpRight className="h-3.5 w-3.5" />
             </Link>
-            <Link
-              href="/upload"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              <Upload className="h-3.5 w-3.5" />
-              رفع ملف
-            </Link>
+            {canAnalyzeAndUpload && (
+              <Link
+                href="/upload"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                رفع ملف
+              </Link>
+            )}
             <Link
               href="/projects"
               className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-secondary px-3.5 py-2 text-xs font-medium hover:bg-secondary/80"
@@ -670,7 +714,7 @@ export default function ProjectDashboardPage() {
                 )
               }
 
-              // 2. رسم دائري مقسم للتوزيع الفئوي (مثل الإسكندرية أو المؤهل الدراسي)
+              // 2. رسم دائري مقسم للتوزيع الفئوي
               if (widget.chartType === 'donut_share') {
                 const r = 38
                 const c = 2 * Math.PI * r
@@ -685,8 +729,8 @@ export default function ProjectDashboardPage() {
                   <div
                     key={widget.id}
                     className={`flex flex-col justify-between rounded-2xl border border-border bg-card/50 p-6 ${
-  widgetIdx === 1 ? 'lg:col-span-4' : 'lg:col-span-6'
-}`}
+                      widgetIdx === 1 ? 'lg:col-span-4' : 'lg:col-span-6'
+                    }`}
                   >
                     <div className="flex items-start justify-between">
                       <PieChart className="h-5 w-5 text-primary" />
@@ -867,7 +911,7 @@ export default function ProjectDashboardPage() {
                 )
               }
 
-              // 4. رسم بياني أفقي للمؤشرات الإحصائية المستخرجة من البيانات
+              // 4. رسم بياني أفقي للمؤشرات الإحصائية
               if (widget.chartType === 'metric_distribution') {
                 return (
                   <div
@@ -922,14 +966,18 @@ export default function ProjectDashboardPage() {
             </div>
             <h3 className="text-base font-semibold">لا توجد بيانات مرفوعة لهذا المشروع بعد</h3>
             <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
-              اذهب إلى صفحة رفع البيانات، اختر مشروع <strong>{project?.name}</strong>، وارفع ملف Excel أو CSV لتظهر هنا مؤشرات الأعمال والرسوم البيانية المتكاملة.
+              {canAnalyzeAndUpload
+                ? 'اذهب إلى صفحة رفع البيانات، اختر هذا المشروع، وارفع ملف Excel أو CSV لتظهر هنا مؤشرات الأعمال والرسوم البيانية المتكاملة.'
+                : 'لم يقم فريق العمل برفع أي ملفات بيانات لهذا المشروع بعد.'}
             </p>
-            <Link
-              href="/upload"
-              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-medium text-primary-foreground shadow hover:bg-primary/90"
-            >
-              رفع ملف لهذا المشروع الآن
-            </Link>
+            {canAnalyzeAndUpload && (
+              <Link
+                href="/upload"
+                className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-medium text-primary-foreground shadow hover:bg-primary/90"
+              >
+                رفع ملف لهذا المشروع الآن
+              </Link>
+            )}
           </div>
         )}
       </div>
