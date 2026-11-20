@@ -22,7 +22,13 @@ type WorkspaceDatasetSummary = {
   fileName: string
   rowCount: number
   columnCount: number
+  uploadedAt?: string
   insights: Array<{ title: string; description: string }>
+}
+
+type WorkspaceProjectSummary = {
+  id: string
+  name: string
 }
 
 type SavedReportSummary = {
@@ -50,7 +56,7 @@ export function RightSidebar() {
     loading: roleLoading,
   } = useWorkspaceRole()
 
-  const [projectsCount, setProjectsCount] = useState(0)
+  const [projects, setProjects] = useState<WorkspaceProjectSummary[]>([])
   const [emptyProjectsCount, setEmptyProjectsCount] = useState(0)
   const [membersCount, setMembersCount] = useState(1)
   const [datasets, setDatasets] = useState<WorkspaceDatasetSummary[]>([])
@@ -76,7 +82,7 @@ export function RightSidebar() {
         }
 
         if (!wsId || wsId === 'default') {
-          setProjectsCount(0)
+          setProjects([])
           setDatasets([])
           setRecentReports([])
           setDataLoading(false)
@@ -89,7 +95,12 @@ export function RightSidebar() {
         ])
 
         const projList = Array.isArray(rawProjects) ? rawProjects : []
-        setProjectsCount(projList.length)
+        setProjects(
+          projList.map((p: any) => ({
+            id: p.id || p.projectId,
+            name: p.name || 'مشروع',
+          }))
+        )
         setMembersCount(Array.isArray(rawMembers) && rawMembers.length > 0 ? rawMembers.length : 1)
 
         const collectedDatasets: WorkspaceDatasetSummary[] = []
@@ -101,13 +112,30 @@ export function RightSidebar() {
           const pname = p.name || 'مشروع'
           if (!pid) continue
 
-          // 1. جلب الملفات من التخزين المحلي أو الباك إند
           const storageKey = `insightflow_project_files_${pid}`
           const cached = JSON.parse(localStorage.getItem(storageKey) || '[]')
-          let projHasFiles = false
+          const remoteFiles = await apiRequest<any[]>(`/api/projects/${pid}/files`).catch(() => [])
 
-          if (Array.isArray(cached) && cached.length > 0) {
-            projHasFiles = true
+          const cachedMap = new Map<string, any>(
+            Array.isArray(cached) ? cached.map((c: any) => [c.id, c]) : []
+          )
+
+          if (Array.isArray(remoteFiles) && remoteFiles.length > 0) {
+            remoteFiles.forEach((rf: any) => {
+              const dsId = rf.datasetId || rf.fileId || rf.id
+              const localMatch = cachedMap.get(dsId)
+              collectedDatasets.push({
+                projectId: pid,
+                projectName: pname,
+                datasetId: dsId,
+                fileName: rf.fileName || rf.name || 'ملف بيانات',
+                rowCount: rf.rowCount ?? localMatch?.rowCount ?? 0,
+                columnCount: rf.columnCount ?? localMatch?.columnCount ?? 0,
+                uploadedAt: rf.uploadedAt,
+                insights: localMatch?.insights || [],
+              })
+            })
+          } else if (Array.isArray(cached) && cached.length > 0) {
             cached.forEach((ds: any) => {
               collectedDatasets.push({
                 projectId: pid,
@@ -116,32 +144,14 @@ export function RightSidebar() {
                 fileName: ds.name,
                 rowCount: ds.rowCount ?? 0,
                 columnCount: ds.columnCount ?? 0,
+                uploadedAt: ds.uploadedAt,
                 insights: ds.insights || [],
               })
             })
           } else {
-            const remoteFiles = await apiRequest<any[]>(`/api/projects/${pid}/files`).catch(
-              () => []
-            )
-            if (Array.isArray(remoteFiles) && remoteFiles.length > 0) {
-              projHasFiles = true
-              remoteFiles.forEach((rf: any) => {
-                collectedDatasets.push({
-                  projectId: pid,
-                  projectName: pname,
-                  datasetId: rf.datasetId || rf.id,
-                  fileName: rf.fileName || rf.originalFileName || rf.name || 'ملف بيانات',
-                  rowCount: rf.rowCount ?? 0,
-                  columnCount: rf.columnCount ?? 0,
-                  insights: [],
-                })
-              })
-            }
+            emptyProjs++
           }
 
-          if (!projHasFiles) emptyProjs++
-
-          // 2. جلب التقارير المحفوظة للمشروع
           const projReports = await apiRequest<any[]>(`/api/projects/${pid}/reports`).catch(
             () => []
           )
@@ -165,19 +175,10 @@ export function RightSidebar() {
         )
         setRecentReports(collectedReports.slice(0, 3))
 
-        // تهيئة الرسالة الترحيبية للمساعد بناءً على بيانات القسم الفعلية
         const totalRows = collectedDatasets.reduce((sum, d) => sum + d.rowCount, 0)
-        const latestInsight = collectedDatasets
-          .flatMap((d) => d.insights)
-          .find((i) => i.title && !i.title.includes('اكتمال البيانات'))
-
         const introText =
           collectedDatasets.length > 0
-            ? `مرحباً! أراقب حالياً "${activeWorkspace?.name || 'القسم النشط'}" (${projList.length} مشاريع، ${collectedDatasets.length} ملفات، ${totalRows.toLocaleString()} سجل).${
-                latestInsight
-                  ? ` أبرز ملاحظة: ${latestInsight.title} — ${latestInsight.description}`
-                  : ''
-              }`
+            ? `مرحباً! أراقب حالياً "${activeWorkspace?.name || 'القسم النشط'}" (${projList.length} مشاريع، ${collectedDatasets.length} ملفات، ${totalRows.toLocaleString()} سجل). اسألني عن أي ملف أو مشروع أو اطلب تحليلاً فورياً.`
             : `مرحباً! القسم "${activeWorkspace?.name || 'الحالي'}" جاهز للتحليل. ارفع ملف Excel أو CSV لأي مشروع وسأستخرج لك أهم المؤشرات والتوصيات فوراً.`
 
         setMessages([{ id: 'welcome', sender: 'ai', text: introText }])
@@ -191,7 +192,6 @@ export function RightSidebar() {
     loadSidebarContext()
   }, [activeWorkspaceId, activeWorkspace?.name, roleLoading])
 
-  // اقتراحات أسئلة ذكية ديناميكية
   const smartSuggestions = useMemo(() => {
     if (datasets.length === 0) {
       return ['كيف أبدأ بتحليل بياناتي؟', 'ما هي صيغ الملفات المدعومة؟']
@@ -204,7 +204,6 @@ export function RightSidebar() {
     ]
   }, [datasets])
 
-  // توصيات ديناميكية قابلة للتنفيذ
   const dynamicRecommendations = useMemo(() => {
     const list: Array<{
       title: string
@@ -259,6 +258,42 @@ export function RightSidebar() {
     return list.slice(0, 3)
   }, [emptyProjectsCount, datasets.length, recentReports.length, membersCount, canAnalyzeAndUpload, canManageTeam])
 
+  // دالة مساعدة لجلب رؤى الذكاء الاصطناعي الحقيقية من الباك إند لملف معين
+  async function fetchLiveInsightsForDataset(ds: WorkspaceDatasetSummary) {
+    if (ds.insights && ds.insights.length > 0) {
+      return ds.insights
+    }
+
+    const res = await apiRequest<any>(
+      `/api/analytics/datasets/${ds.datasetId}/insights`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          metrics: [],
+          groupBy: [],
+          filters: [],
+          comparisons: [],
+        }),
+      }
+    ).catch(() => null)
+
+    const rawList: any[] = res?.insights || res?.Insights || []
+    const mapped = rawList.map((item: any) => ({
+      title: item.title || item.Title || 'ملاحظة تحليلية',
+      description: item.description || item.Description || item.message || '',
+    }))
+
+    if (mapped.length > 0) {
+      setDatasets((prev) =>
+        prev.map((item) =>
+          item.datasetId === ds.datasetId ? { ...item, insights: mapped } : item
+        )
+      )
+    }
+
+    return mapped
+  }
+
   async function handleSendQuestion(questionText?: string) {
     const q = (questionText ?? inputValue).trim()
     if (!q || isThinking) return
@@ -275,13 +310,13 @@ export function RightSidebar() {
       if (!latestDs) {
         if (q.includes('صيغ')) {
           reply =
-            'تدعم المنصة ملفات Excel (.xlsx, .xls) وملفات CSV. اذهب إلى صفحة "رفع ملف بيانات" واختر المشروع لبدء التحليل التلقائي.'
+            'تدعم المنصة ملفات Excel (.xlsx, .xls) وملفات CSV. يمكنك رفعها من صفحة "رفع ملف بيانات" ليتم تحليلها تلقائياً.'
         } else {
           reply =
-            'لا توجد ملفات مرفوعة في هذا القسم حتى الآن. ارفع ملف بيانات لأحد مشاريعك وسأقوم بتحليل الأعمدة والصفوف وتلخيص النتائج لك فوراً.'
+            'لا توجد ملفات مرفوعة في هذا القسم حتى الآن. ارفع ملف بيانات لأحد مشاريعك وسأقوم بتحليله وتلخيص نتائجه فوراً.'
         }
       } else if (q.includes('حدّث') || q.includes('تحديث') || q.includes('ذكاء')) {
-        // استدعاء محرك الذكاء الاصطناعي الحقيقي من الباك إند
+        // إجبار إعادة استدعاء محرك الذكاء الاصطناعي من الباك إند
         const res = await apiRequest<any>(
           `/api/analytics/datasets/${latestDs.datasetId}/insights`,
           {
@@ -295,34 +330,88 @@ export function RightSidebar() {
           }
         ).catch(() => null)
 
-        const freshInsights: any[] = res?.insights || res?.Insights || latestDs.insights || []
-        if (freshInsights.length > 0) {
-          const topTwo = freshInsights.slice(0, 2)
-          reply = `تم تحديث تحليل ملف "${latestDs.fileName}":\n• ${topTwo
-            .map((i: any) => `${i.title}: ${i.description}`)
+        const rawList: any[] = res?.insights || res?.Insights || []
+        const fresh = rawList.map((item: any) => ({
+          title: item.title || item.Title || 'ملاحظة تحليلية',
+          description: item.description || item.Description || '',
+        }))
+
+        if (fresh.length > 0) {
+          setDatasets((prev) =>
+            prev.map((item) =>
+              item.datasetId === latestDs.datasetId ? { ...item, insights: fresh } : item
+            )
+          )
+          reply = `تم تحديث التحليل الذكي لملف "${latestDs.fileName}":\n• ${fresh
+            .slice(0, 3)
+            .map((i) => `${i.title}: ${i.description}`)
             .join('\n• ')}`
         } else {
-          reply = `ملف "${latestDs.fileName}" يحتوي على ${latestDs.rowCount.toLocaleString()} سجل و ${latestDs.columnCount} أعمدة، وهو جاهز للاستعلام في مركز التحليلات.`
+          reply = `تم فحص ملف "${latestDs.fileName}" (${latestDs.rowCount.toLocaleString()} صف × ${latestDs.columnCount} عمود). افتح مركز التحليلات لتحديد الأعمدة والمقاييس المراد تحليلها.`
         }
-      } else {
-        // تلخيص ذكي من الرؤى والبيانات المستخرجة لملفات القسم
-        const allInsights = datasets.flatMap((d) =>
-          d.insights.map((ins) => ({ ...ins, fileName: d.fileName }))
-        )
-        const matching = allInsights.filter(
-          (ins) =>
-            q.split(/\s+/).some((word) => word.length > 2 && (ins.title?.includes(word) || ins.description?.includes(word)))
-        )
+      } else if (q.includes('لخّص') || q.includes('نتائج') || q.includes('ملخص')) {
+        // البحث عن الملف المذكور في السؤال أو استخدام أحدث ملف
+        const targetDs =
+          datasets.find((d) => q.toLowerCase().includes(d.fileName.toLowerCase())) || latestDs
+        const liveInsights = await fetchLiveInsightsForDataset(targetDs)
 
-        const chosen = (matching.length > 0 ? matching : allInsights).slice(0, 3)
-
-        if (chosen.length > 0) {
-          reply = `بناءً على بيانات القسم (${datasets.length} ملفات):\n• ${chosen
-            .map((c) => `[${c.fileName}] ${c.title}: ${c.description}`)
+        if (liveInsights.length > 0) {
+          reply = `ملخص نتائج ملف "${targetDs.fileName}" (${targetDs.rowCount.toLocaleString()} سجل و ${targetDs.columnCount} أعمدة):\n• ${liveInsights
+            .slice(0, 3)
+            .map((i) => `${i.title}: ${i.description}`)
             .join('\n• ')}`
         } else {
-          const totalRows = datasets.reduce((s, d) => s + d.rowCount, 0)
-          reply = `القسم يضم ${projectsCount} مشاريع و ${datasets.length} ملفات بإجمالي ${totalRows.toLocaleString()} سجل. أحدث ملف هو "${latestDs.fileName}" (${latestDs.rowCount.toLocaleString()} صف). يمكنك فتح مركز التحليلات لإجراء مقارنات مخصصة.`
+          reply = `ملف "${targetDs.fileName}" تابع لمشروع "${targetDs.projectName}"، ويحتوي على ${targetDs.rowCount.toLocaleString()} صف و ${targetDs.columnCount} أعمدة وهو جاهز لعرض الرسوم البيانية في لوحة المشروع.`
+        }
+      } else if (q.includes('اتجاهات') || q.includes('فروق') || q.includes('مقارن')) {
+        const liveInsights = await fetchLiveInsightsForDataset(latestDs)
+        const byProject = projects.map((p) => {
+          const pFiles = datasets.filter((d) => d.projectId === p.id)
+          const pRows = pFiles.reduce((s, f) => s + f.rowCount, 0)
+          return `${p.name}: ${pFiles.length} ملف (${pRows.toLocaleString()} سجل)`
+        })
+
+        reply = `مقارنة وتوزيع البيانات عبر مشاريع القسم:\n• ${byProject.join('\n• ')}${
+          liveInsights.length > 0
+            ? `\n\nأبرز اتجاه مكتشف في "${latestDs.fileName}":\n• ${liveInsights[0].title}: ${liveInsights[0].description}`
+            : ''
+        }`
+      } else if (q.includes('مشاريع') || q.includes('مشروع')) {
+        reply = `يحتوي هذا القسم على ${projects.length} مشاريع:\n• ${projects
+          .map((p) => {
+            const count = datasets.filter((d) => d.projectId === p.id).length
+            return `${p.name} (${count} ملفات)`
+          })
+          .join('\n• ')}`
+      } else if (q.includes('ملف') || q.includes('ملفات')) {
+        const topFiles = datasets.slice(-5).reverse()
+        reply = `أحدث الملفات المرفوعة في القسم (${datasets.length} إجمالاً):\n• ${topFiles
+          .map((f) => `${f.fileName} (${f.rowCount.toLocaleString()} صف) — مشروع ${f.projectName}`)
+          .join('\n• ')}`
+      } else {
+        // لأي سؤال حر يكتبه المستخدم: نبحث في الرؤى الحية من السيرفر
+        const liveInsights = await fetchLiveInsightsForDataset(latestDs)
+        const keywords = q.split(/\s+/).filter((w) => w.length > 2)
+        const matched = liveInsights.filter((ins) =>
+          keywords.some(
+            (kw) =>
+              ins.title.toLowerCase().includes(kw.toLowerCase()) ||
+              ins.description.toLowerCase().includes(kw.toLowerCase())
+          )
+        )
+
+        if (matched.length > 0) {
+          reply = `إليك ما وجدته بخصوص سؤالك في "${latestDs.fileName}":\n• ${matched
+            .slice(0, 3)
+            .map((m) => `${m.title}: ${m.description}`)
+            .join('\n• ')}`
+        } else if (liveInsights.length > 0) {
+          reply = `بناءً على تحليل أحدث بيانات القسم ("${latestDs.fileName}"):\n• ${liveInsights
+            .slice(0, 2)
+            .map((m) => `${m.title}: ${m.description}`)
+            .join('\n• ')}\n\nيمكنك أيضاً فتح "مركز التحليلات" لتصفية الأعمدة بدقة.`
+        } else {
+          reply = `تم التحقق من "${latestDs.fileName}" (${latestDs.rowCount.toLocaleString()} سجل). لطرح استعلامات تفصيلية على أعمدة محددة، انتقل إلى صفحة "التحليلات" واختر المقاييس المطلوبة.`
         }
       }
 
@@ -364,7 +453,6 @@ export function RightSidebar() {
         </div>
 
         <div className="space-y-3 p-4">
-          {/* سجل الرسائل */}
           <div className="max-h-56 space-y-2.5 overflow-y-auto pe-1">
             {messages.map((msg) => (
               <div
@@ -386,7 +474,6 @@ export function RightSidebar() {
             )}
           </div>
 
-          {/* اقتراحات سريعة */}
           <div className="flex flex-wrap gap-1.5">
             {smartSuggestions.map((s) => (
               <button
@@ -401,7 +488,6 @@ export function RightSidebar() {
             ))}
           </div>
 
-          {/* مربع الإدخال */}
           <form
             onSubmit={(e) => {
               e.preventDefault()
