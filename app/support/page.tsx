@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 
 const WEB3FORMS_ACCESS_KEY =
-  process.env.NEXT_PUBLIC_WEB3FORMS_KEY || 'bc7f0489-a0ab-43fe-b918-12f3e1580066'
+  process.env.NEXT_PUBLIC_WEB3FORMS_KEY || '03204a83-f558-4f27-a13f-4a65e4ccaec2'
 
 const FAQS = [
   {
