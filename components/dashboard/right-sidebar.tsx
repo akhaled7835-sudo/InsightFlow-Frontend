@@ -24,8 +24,9 @@ type WorkspaceDatasetSummary = {
   rowCount: number
   columnCount: number
   uploadedAt?: string
-  columns: Array<{ name: string; dataType?: string }>
+  columnNames: string[]
   sampleRows: Array<Record<string, any>>
+  statisticalFacts: string[]
 }
 
 type WorkspaceProjectSummary = {
@@ -175,48 +176,43 @@ export function RightSidebar() {
               const localMatch = cachedMap.get(dsId) || cachedMap.get(fname)
               const dedupKey = `${pid}::${fname}`
 
-              // جلب الأعمدة وعينة حقيقية من صفوف الملف من السيرفر ليتمكن الذكاء الاصطناعي من قراءتها
-              let cols: Array<{ name: string; dataType?: string }> = []
-              let sampleRows: Array<Record<string, any>> = []
+              let insightsArr: any[] = Array.isArray(localMatch?.insights)
+                ? localMatch.insights
+                : []
 
-              if (dsId) {
-                const [schemaRes, queryRes] = await Promise.all([
-                  apiRequest<any>(`/api/analytics/datasets/${dsId}/schema`).catch(() => null),
-                  apiRequest<any>(`/api/analytics/datasets/${dsId}/query`, {
+              // إذا لم تكن الحقائق الإحصائية مخزنة محلياً، نجلبها من endpoint التحليل الفعلي في الباك إند
+              if (insightsArr.length === 0 && dsId) {
+                const insRes = await apiRequest<any>(
+                  `/api/analytics/datasets/${dsId}/insights`,
+                  {
                     method: 'POST',
                     body: JSON.stringify({
                       metrics: [],
                       groupBy: [],
                       filters: [],
-                      limit: 40,
+                      comparisons: [],
                     }),
-                  }).catch(() => null),
-                ])
-
-                const rawCols = schemaRes?.columns || schemaRes?.Columns || []
-                if (Array.isArray(rawCols)) {
-                  cols = rawCols.map((c: any) => ({
-                    name: c.name || c.columnName || String(c),
-                    dataType: c.dataType || c.type,
-                  }))
-                }
-
-                const rawRows = queryRes?.rows || queryRes?.Rows || queryRes?.data || []
-                if (Array.isArray(rawRows)) {
-                  sampleRows = rawRows.slice(0, 40)
-                }
+                  }
+                ).catch(() => null)
+                insightsArr = insRes?.insights || insRes?.Insights || []
               }
+
+              const statisticalFacts = insightsArr.map(
+                (i: any) =>
+                  `${i.title || i.Title}: ${(i.description || i.Description || '').split('التوصية:')[0].trim()}`
+              )
 
               uniqueDatasetsMap.set(dedupKey, {
                 projectId: pid,
                 projectName: pname,
                 datasetId: dsId,
                 fileName: fname,
-                rowCount: rf.rowCount ?? localMatch?.rowCount ?? sampleRows.length,
-                columnCount: rf.columnCount ?? localMatch?.columnCount ?? cols.length,
+                rowCount: rf.rowCount ?? localMatch?.rowCount ?? 0,
+                columnCount: rf.columnCount ?? localMatch?.columnCount ?? 0,
                 uploadedAt: rf.uploadedAt || localMatch?.uploadedAt,
-                columns: cols,
-                sampleRows,
+                columnNames: localMatch?.columnNames || [],
+                sampleRows: localMatch?.sampleRows || [],
+                statisticalFacts,
               })
             }
           } else {
@@ -271,7 +267,7 @@ export function RightSidebar() {
     const latestFile = datasets[datasets.length - 1]
     return [
       `ماذا نستنتج من ملف ${latestFile.fileName}؟`,
-      'ما هي أبرز الأنماط والملاحظات في الأرقام؟',
+      'ما هي أبرز الأنماط والفروق في الأرقام؟',
       'اقترح قرارات عملية بناءً على هذه البيانات',
     ]
   }, [datasets])
@@ -341,7 +337,6 @@ export function RightSidebar() {
     setIsThinking(true)
 
     try {
-      // إرسال البيانات الحقيقية (الأعمدة والصفوف) للذكاء الاصطناعي ليقرأها ويحللها مباشرة
       const workspaceContext = {
         workspaceName: activeWorkspace?.name || 'القسم النشط',
         datasets: datasets.map((d) => ({
@@ -349,8 +344,9 @@ export function RightSidebar() {
           projectName: d.projectName,
           totalRows: d.rowCount,
           totalColumns: d.columnCount,
-          columns: d.columns,
-          actualDataRows: d.sampleRows,
+          columnNames: d.columnNames,
+          actualRowsSample: d.sampleRows,
+          computedStatisticalFacts: d.statisticalFacts,
         })),
       }
 

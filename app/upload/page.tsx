@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import * as XLSX from 'xlsx'
 import {
   UploadCloud,
   FileSpreadsheet,
@@ -52,6 +53,26 @@ function fileIcon(type: string, className = 'h-5 w-5') {
 function formatSize(bytes: number) {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   return `${(bytes / 1024).toFixed(0)} KB`
+}
+
+// استخراج أسماء الأعمدة وعينة الصفوف الفعلية من الملف لتمكين المساعد الذكي من قراءتها مباشرة
+async function parseLocalSpreadsheetSample(file: File): Promise<{
+  columnNames: string[]
+  sampleRows: Array<Record<string, any>>
+}> {
+  try {
+    const buffer = await file.arrayBuffer()
+    const workbook = XLSX.read(buffer, { type: 'array' })
+    const firstSheetName = workbook.SheetNames[0]
+    if (!firstSheetName) return { columnNames: [], sampleRows: [] }
+    const sheet = workbook.Sheets[firstSheetName]
+    const jsonRows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: null })
+    const sampleRows = jsonRows.slice(0, 50)
+    const columnNames = sampleRows.length > 0 ? Object.keys(sampleRows[0]) : []
+    return { columnNames, sampleRows }
+  } catch {
+    return { columnNames: [], sampleRows: [] }
+  }
 }
 
 export default function UploadPage() {
@@ -141,6 +162,9 @@ export default function UploadPage() {
       }
 
       try {
+        // قراءة عينة الجدول محلياً بالتوازي مع الرفع
+        const parsedPromise = parseLocalSpreadsheetSample(f)
+
         const formData = new FormData()
         formData.append('file', f)
 
@@ -182,6 +206,7 @@ export default function UploadPage() {
           )
 
           const insightsList = insightsRes?.insights || insightsRes?.Insights || []
+          const { columnNames, sampleRows } = await parsedPromise
 
           const newDatasetRecord = {
             id: datasetId,
@@ -189,8 +214,10 @@ export default function UploadPage() {
             name: f.name,
             size: f.size,
             type: ext(f.name),
-            rowCount: rows ?? 0,
-            columnCount: columns ?? 0,
+            rowCount: rows ?? sampleRows.length ?? 0,
+            columnCount: columns ?? columnNames.length ?? 0,
+            columnNames,
+            sampleRows,
             insights: insightsList,
             uploadedAt: new Date().toISOString(),
           }
@@ -199,7 +226,7 @@ export default function UploadPage() {
             const storageKey = `insightflow_project_files_${selectedProjectId}`
             const existing = JSON.parse(localStorage.getItem(storageKey) || '[]')
             const updated = [
-              ...existing.filter((item: any) => item.id !== datasetId),
+              ...existing.filter((item: any) => item.id !== datasetId && item.name !== f.name),
               newDatasetRecord,
             ]
             localStorage.setItem(storageKey, JSON.stringify(updated))
