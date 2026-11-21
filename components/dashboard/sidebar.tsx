@@ -34,7 +34,6 @@ export function Sidebar({
   const [active, setActive] = useState(activeItem)
   const { t } = useTranslation()
 
-  // Updated navigation with correct specific routes for Projects and AI Reports
   const nav = [
     { id: 'overview', label: t.overview, href: '/dashboard', icon: LayoutDashboard },
     { id: 'analytics', label: t.analytics, href: '/analytics', icon: BarChart3 },
@@ -110,7 +109,10 @@ export function Sidebar({
             <Link
               key={item.id}
               href={item.href}
-              onClick={() => setActive(item.id)}
+              onClick={() => {
+                setActive(item.id)
+                onClose?.()
+              }}
               className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
                 isActive
                   ? 'bg-primary/15 font-medium text-primary'
@@ -136,14 +138,37 @@ export function Sidebar({
       </nav>
 
       <div className="mt-auto flex flex-col gap-1 border-t border-border pt-3">
-        <button className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+        <Link
+          href="/settings"
+          onClick={() => {
+            setActive('settings')
+            onClose?.()
+          }}
+          className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+            active === 'settings'
+              ? 'bg-primary/15 font-medium text-primary'
+              : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+          }`}
+        >
           <Settings className="h-4 w-4" />
-          {t.settings}
-        </button>
-        <button className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+          <span className="flex-1 text-start">{t.settings || 'الإعدادات'}</span>
+        </Link>
+
+        <Link
+          href="/support"
+          onClick={() => {
+            setActive('support')
+            onClose?.()
+          }}
+          className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+            active === 'support'
+              ? 'bg-primary/15 font-medium text-primary'
+              : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+          }`}
+        >
           <LifeBuoy className="h-4 w-4" />
-          {t.helpSupport}
-        </button>
+          <span className="flex-1 text-start">{t.helpSupport || 'المساعدة والدعم'}</span>
+        </Link>
       </div>
     </div>
   )
