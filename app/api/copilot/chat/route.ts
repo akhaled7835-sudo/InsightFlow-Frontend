@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     const systemInstruction = `أنت المساعد الذكي لمنصة InsightFlow لتحليل البيانات والأعمال.
 تتصرف كمحلل بيانات وخبير استراتيجي محترف بأسلوب محادثة طبيعي وواضح (مثل ChatGPT)، وتجنب تماماً تكرار نصوص التقارير الجامدة.
 - إذا سألك المستخدم عن بياناته أو مشاريعه أو ملفاته، اعتمد على "سياق القسم النشط" المرفق بدقة.
-- إذا سألك المستخدم سؤالاً عاماً أو يطلب معلومات حديثة من الإنترنت، استخدم بحث جوجل المدمج واذكر المعلومات بدقة.
+- إذا سألك المستخدم سؤالاً عاماً، اقتصادياً، أو تقنياً، قدم إجابة شاملة وموثوقة مع ذكر المراجع أو المنهجيات المعروفة.
 - أجب باللغة العربية الواضحة والاحترافية (أو بلغة سؤال المستخدم).
 
 سياق القسم النشط حالياً:
@@ -36,22 +36,35 @@ ${JSON.stringify(workspaceContext || {}, null, 2)}`
       { role: 'user', parts: [{ text: message }] },
     ]
 
-    const modelsToTry = ['gemini-3.8-flash', 'gemini-3.8-pro', 'gemini-3.0-flash']
+    // محاولة الموديلات المجانية بالترتيب (مع البحث أولاً ثم بدونه إذا كانت الباقة المجانية تمنع البحث)
+    const attempts = [
+      { model: 'gemini-3.8-flash', useSearch: true },
+      { model: 'gemini-3.8-flash-lite', useSearch: true },
+      { model: 'gemini-2.5-flash-lite', useSearch: true },
+      { model: 'gemini-3.8-flash-lite', useSearch: false },
+      { model: 'gemini-2.5-flash-lite', useSearch: false },
+      { model: 'gemini-2.0-flash', useSearch: false },
+    ]
+
     let data: any = null
     let okResponse = false
     let lastStatus = 500
 
-    for (const modelName of modelsToTry) {
+    for (const attempt of attempts) {
+      const payload: any = {
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        contents,
+      }
+      if (attempt.useSearch) {
+        payload.tools = [{ google_search: {} }]
+      }
+
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${attempt.model}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: systemInstruction }] },
-            contents,
-            tools: [{ google_search: {} }],
-          }),
+          body: JSON.stringify(payload),
         }
       )
 
@@ -63,10 +76,11 @@ ${JSON.stringify(workspaceContext || {}, null, 2)}`
         break
       }
 
-      // إذا كان الخطأ بسبب اسم الموديل فقط نجرب الموديل التالي، وإلا نوقف المحاولة
-      if (!data?.error?.message?.includes('no longer available') && response.status !== 404) {
-        break
+      // إذا كان الخطأ بسبب الحصة (429) أو عدم توفر الموديل (404/400)، ننتقل للمحاولة التالية
+      if (response.status === 429 || response.status === 404 || response.status === 400) {
+        continue
       }
+      break
     }
 
     if (!okResponse) {
@@ -82,7 +96,6 @@ ${JSON.stringify(workspaceContext || {}, null, 2)}`
       candidate?.content?.parts?.map((p: any) => p.text || '').join('\n').trim() ||
       'لم أتمكن من صياغة إجابة، حاول مرة أخرى.'
 
-    // استخراج روابط المصادر من بحث جوجل
     const sources: Array<{ title: string; url: string }> = []
     const seenUrls = new Set<string>()
     const chunks = candidate?.groundingMetadata?.groundingChunks || []
