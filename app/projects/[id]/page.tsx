@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
 import { apiRequest, getSession } from '@/lib/api'
 import { useWorkspaceRole } from '@/lib/useWorkspaceRole'
+import { useTranslation } from '@/lib/i18n'
 import {
   Database,
   ArrowLeft,
@@ -61,10 +62,351 @@ type SmartVisualWidget =
       metrics: Array<{ label: string; value: number; pct: number; isNegative: boolean }>
     }
 
+const PROJECT_DASH_LOCALES: Record<
+  string,
+  {
+    loadingMsg: string
+    defaultTitle: string
+    subtitle: string
+    refreshingBtn: string
+    refreshBtn: string
+    reportsBtn: string
+    uploadBtn: string
+    projectsBtn: string
+    actualLegend: string
+    baselineLegend: string
+    actualTooltip: string
+    baselineTooltip: string
+    otherCategories: string
+    recordsUnit: string
+    segmentLabel: string
+    trendTitle: string
+    trendSubtitle: string
+    metricsDistTitle: string
+    metricsDistSubtitle: string
+    peakAvgKpi: string
+    peakBadge: string
+    totalCasesKpi: string
+    variablesUnit: string
+    extractedInsightsKpi: string
+    activeAnalysisBadge: string
+    avgPrefix: string
+    sharePrefix: string
+    shareDistTitle: (cat: string) => string
+    shareDistSub: (lbl: string) => string
+    compTitle: (a: string, b: string) => string
+    compSub: (a: string, b: string) => string
+    emptyTitle: string
+    emptyDescUpload: string
+    emptyDescViewer: string
+    uploadNowBtn: string
+  }
+> = {
+  en: {
+    loadingMsg: 'Analyzing project data and building charts...',
+    defaultTitle: 'Project Dashboard',
+    subtitle: 'Interactive data analytics dashboard — hover over any chart to inspect detailed values',
+    refreshingBtn: 'Updating...',
+    refreshBtn: 'Refresh Analysis',
+    reportsBtn: 'Reports & Recommendations',
+    uploadBtn: 'Upload File',
+    projectsBtn: 'Projects',
+    actualLegend: 'Actual',
+    baselineLegend: 'Baseline',
+    actualTooltip: 'Actual Value',
+    baselineTooltip: 'Baseline',
+    otherCategories: 'Other categories',
+    recordsUnit: 'records',
+    segmentLabel: 'Segment',
+    trendTitle: 'Project Metrics Trajectory',
+    trendSubtitle: 'Actual variable performance vs statistical baseline',
+    metricsDistTitle: 'Statistical Metrics Summary',
+    metricsDistSubtitle: 'Comparison of values and averages extracted from file columns',
+    peakAvgKpi: 'Highest Recorded Average',
+    peakBadge: 'Peak Metric',
+    totalCasesKpi: 'Total Analyzed Cases',
+    variablesUnit: 'variables',
+    extractedInsightsKpi: 'Extracted Insights',
+    activeAnalysisBadge: 'Active Analysis',
+    avgPrefix: 'Avg',
+    sharePrefix: 'Share of',
+    shareDistTitle: (cat) => `Share Distribution by ${cat}`,
+    shareDistSub: (lbl) => `Share of (${lbl}) out of total records`,
+    compTitle: (a, b) => `Metric Comparison: ${a} vs ${b}`,
+    compSub: (a, b) => `Numerical variance analysis between ${a} and ${b}`,
+    emptyTitle: 'No data uploaded for this project yet',
+    emptyDescUpload: 'Go to Upload Data, select this project, and upload an Excel or CSV file to generate KPIs and charts.',
+    emptyDescViewer: 'Your team has not uploaded any datasets to this project yet.',
+    uploadNowBtn: 'Upload File to Project Now',
+  },
+  ar: {
+    loadingMsg: 'جاري تحليل بيانات المشروع وبناء الرسوم البيانية...',
+    defaultTitle: 'لوحة تحكم المشروع',
+    subtitle: 'لوحة تحليل البيانات التفاعلية — مرر المؤشر فوق أي رسم بياني لعرض القيم التفصيلية',
+    refreshingBtn: 'جاري التحديث...',
+    refreshBtn: 'تحديث التحليل',
+    reportsBtn: 'التقارير والتوصيات',
+    uploadBtn: 'رفع ملف',
+    projectsBtn: 'المشاريع',
+    actualLegend: 'الفعلي',
+    baselineLegend: 'خط الأساس',
+    actualTooltip: 'القيمة الفعلية',
+    baselineTooltip: 'خط الأساس',
+    otherCategories: 'فئات أخرى',
+    recordsUnit: 'سجل',
+    segmentLabel: 'شريحة',
+    trendTitle: 'مسار تطور مؤشرات المشروع',
+    trendSubtitle: 'الأداء الفعلي للمتغيرات مقابل خط الأساس الإحصائي',
+    metricsDistTitle: 'ملخص المؤشرات الإحصائية للبيانات',
+    metricsDistSubtitle: 'مقارنة القيم والمتوسطات المستخرجة من أعمدة الملف',
+    peakAvgKpi: 'أعلى متوسط مسجل',
+    peakBadge: 'ذروة المؤشرات',
+    totalCasesKpi: 'إجمالي الحالات المحللة',
+    variablesUnit: 'متغيرات',
+    extractedInsightsKpi: 'الرؤى المستخرجة',
+    activeAnalysisBadge: 'تحليل نشط',
+    avgPrefix: 'متوسط',
+    sharePrefix: 'حصة',
+    shareDistTitle: (cat) => `توزيع الحصص حسب ${cat}`,
+    shareDistSub: (lbl) => `استحواذ شريحة (${lbl}) من إجمالي السجلات`,
+    compTitle: (a, b) => `مقارنة مؤشر ${a} و ${b}`,
+    compSub: (a, b) => `تحليل الفروق الرقمية بين ${a} و ${b}`,
+    emptyTitle: 'لا توجد بيانات مرفوعة لهذا المشروع بعد',
+    emptyDescUpload: 'اذهب إلى صفحة رفع البيانات، اختر هذا المشروع، وارفع ملف Excel أو CSV لتظهر هنا مؤشرات الأعمال والرسوم البيانية المتكاملة.',
+    emptyDescViewer: 'لم يقم فريق العمل برفع أي ملفات بيانات لهذا المشروع بعد.',
+    uploadNowBtn: 'رفع ملف لهذا المشروع الآن',
+  },
+  de: {
+    loadingMsg: 'Projektdaten werden analysiert und Diagramme erstellt...',
+    defaultTitle: 'Projekt-Dashboard',
+    subtitle: 'Interaktives Analyse-Dashboard — bewegen Sie den Mauszeiger über ein Diagramm für Detailwerte',
+    refreshingBtn: 'Wird aktualisiert...',
+    refreshBtn: 'Analyse aktualisieren',
+    reportsBtn: 'Berichte & Empfehlungen',
+    uploadBtn: 'Datei hochladen',
+    projectsBtn: 'Projekte',
+    actualLegend: 'Ist-Wert',
+    baselineLegend: 'Basislinie',
+    actualTooltip: 'Tatsächlicher Wert',
+    baselineTooltip: 'Basislinie',
+    otherCategories: 'Andere Kategorien',
+    recordsUnit: 'Datensätze',
+    segmentLabel: 'Segment',
+    trendTitle: 'Entwicklungsverlauf der Projektkennzahlen',
+    trendSubtitle: 'Tatsächliche Leistung im Vergleich zur statistischen Basislinie',
+    metricsDistTitle: 'Zusammenfassung der statistischen Kennzahlen',
+    metricsDistSubtitle: 'Vergleich der aus den Dateispalten extrahierten Werte und Durchschnitte',
+    peakAvgKpi: 'Höchster gemessener Durchschnitt',
+    peakBadge: 'Spitzenwert',
+    totalCasesKpi: 'Analysierte Datensätze gesamt',
+    variablesUnit: 'Variablen',
+    extractedInsightsKpi: 'Extrahierte Erkenntnisse',
+    activeAnalysisBadge: 'Aktive Analyse',
+    avgPrefix: 'Ø',
+    sharePrefix: 'Anteil',
+    shareDistTitle: (cat) => `Anteilsverteilung nach ${cat}`,
+    shareDistSub: (lbl) => `Anteil von (${lbl}) an den Gesamtdatensätzen`,
+    compTitle: (a, b) => `Vergleich: ${a} vs. ${b}`,
+    compSub: (a, b) => `Numerische Abweichungsanalyse zwischen ${a} und ${b}`,
+    emptyTitle: 'Noch keine Daten für dieses Projekt hochgeladen',
+    emptyDescUpload: 'Gehen Sie zu Daten hochladen, wählen Sie dieses Projekt und laden Sie eine Excel- oder CSV-Datei hoch.',
+    emptyDescViewer: 'Ihr Team hat für dieses Projekt noch keine Datensätze hochgeladen.',
+    uploadNowBtn: 'Jetzt Datei für Projekt hochladen',
+  },
+  es: {
+    loadingMsg: 'Analizando datos del proyecto y generando gráficos...',
+    defaultTitle: 'Panel del Proyecto',
+    subtitle: 'Panel de análisis interactivo — pasa el cursor sobre cualquier gráfico para ver detalles',
+    refreshingBtn: 'Actualizando...',
+    refreshBtn: 'Actualizar análisis',
+    reportsBtn: 'Informes y Recomendaciones',
+    uploadBtn: 'Subir archivo',
+    projectsBtn: 'Proyectos',
+    actualLegend: 'Real',
+    baselineLegend: 'Línea base',
+    actualTooltip: 'Valor real',
+    baselineTooltip: 'Línea base',
+    otherCategories: 'Otras categorías',
+    recordsUnit: 'registros',
+    segmentLabel: 'Segmento',
+    trendTitle: 'Trayectoria de métricas del proyecto',
+    trendSubtitle: 'Rendimiento real frente a la línea base estadística',
+    metricsDistTitle: 'Resumen de métricas estadísticas',
+    metricsDistSubtitle: 'Comparación de valores y promedios extraídos de las columnas',
+    peakAvgKpi: 'Promedio máximo registrado',
+    peakBadge: 'Pico máximo',
+    totalCasesKpi: 'Total de casos analizados',
+    variablesUnit: 'variables',
+    extractedInsightsKpi: 'Hallazgos extraídos',
+    activeAnalysisBadge: 'Análisis activo',
+    avgPrefix: 'Prom.',
+    sharePrefix: 'Cuota de',
+    shareDistTitle: (cat) => `Distribución por ${cat}`,
+    shareDistSub: (lbl) => `Participación de (${lbl}) sobre el total de registros`,
+    compTitle: (a, b) => `Comparación: ${a} vs ${b}`,
+    compSub: (a, b) => `Análisis de diferencia numérica entre ${a} y ${b}`,
+    emptyTitle: 'Aún no hay datos subidos para este proyecto',
+    emptyDescUpload: 'Ve a Subir datos, selecciona este proyecto y sube un archivo Excel o CSV.',
+    emptyDescViewer: 'Tu equipo aún no ha subido archivos para este proyecto.',
+    uploadNowBtn: 'Subir archivo ahora',
+  },
+  it: {
+    loadingMsg: 'Analisi dei dati del progetto e creazione grafici...',
+    defaultTitle: 'Dashboard Progetto',
+    subtitle: 'Dashboard interattiva — passa il cursore sui grafici per i valori dettagliati',
+    refreshingBtn: 'Aggiornamento...',
+    refreshBtn: 'Aggiorna analisi',
+    reportsBtn: 'Report e Raccomandazioni',
+    uploadBtn: 'Carica file',
+    projectsBtn: 'Progetti',
+    actualLegend: 'Reale',
+    baselineLegend: 'Linea base',
+    actualTooltip: 'Valore reale',
+    baselineTooltip: 'Linea base',
+    otherCategories: 'Altre categorie',
+    recordsUnit: 'record',
+    segmentLabel: 'Segmento',
+    trendTitle: 'Andamento metriche di progetto',
+    trendSubtitle: 'Prestazioni reali rispetto alla linea base statistica',
+    metricsDistTitle: 'Riepilogo metriche statistiche',
+    metricsDistSubtitle: 'Confronto dei valori e delle medie estratte dalle colonne',
+    peakAvgKpi: 'Media massima registrata',
+    peakBadge: 'Valore di picco',
+    totalCasesKpi: 'Totale casi analizzati',
+    variablesUnit: 'variabili',
+    extractedInsightsKpi: 'Analisi estratte',
+    activeAnalysisBadge: 'Analisi attiva',
+    avgPrefix: 'Media',
+    sharePrefix: 'Quota',
+    shareDistTitle: (cat) => `Distribuzione per ${cat}`,
+    shareDistSub: (lbl) => `Quota di (${lbl}) sul totale dei record`,
+    compTitle: (a, b) => `Confronto: ${a} vs ${b}`,
+    compSub: (a, b) => `Analisi dello scostamento numerico tra ${a} e ${b}`,
+    emptyTitle: 'Nessun dato caricato per questo progetto',
+    emptyDescUpload: 'Vai su Carica dati, seleziona questo progetto e carica un file Excel o CSV.',
+    emptyDescViewer: 'Il team non ha ancora caricato file per questo progetto.',
+    uploadNowBtn: 'Carica file ora',
+  },
+  fr: {
+    loadingMsg: 'Analyse des données du projet et création des graphiques...',
+    defaultTitle: 'Tableau de bord du projet',
+    subtitle: 'Tableau de bord interactif — survolez un graphique pour afficher les valeurs détaillées',
+    refreshingBtn: 'Mise à jour...',
+    refreshBtn: 'Actualiser l’analyse',
+    reportsBtn: 'Rapports & Recommandations',
+    uploadBtn: 'Importer un fichier',
+    projectsBtn: 'Projets',
+    actualLegend: 'Réel',
+    baselineLegend: 'Référence',
+    actualTooltip: 'Valeur réelle',
+    baselineTooltip: 'Référence',
+    otherCategories: 'Autres catégories',
+    recordsUnit: 'lignes',
+    segmentLabel: 'Segment',
+    trendTitle: 'Trajectoire des indicateurs du projet',
+    trendSubtitle: 'Performance réelle par rapport à la base statistique',
+    metricsDistTitle: 'Résumé des indicateurs statistiques',
+    metricsDistSubtitle: 'Comparaison des valeurs et moyennes extraites des colonnes',
+    peakAvgKpi: 'Moyenne maximale enregistrée',
+    peakBadge: 'Pic maximal',
+    totalCasesKpi: 'Total des cas analysés',
+    variablesUnit: 'variables',
+    extractedInsightsKpi: 'Analyses extraites',
+    activeAnalysisBadge: 'Analyse active',
+    avgPrefix: 'Moy.',
+    sharePrefix: 'Part de',
+    shareDistTitle: (cat) => `Répartition par ${cat}`,
+    shareDistSub: (lbl) => `Part de (${lbl}) sur le total des enregistrements`,
+    compTitle: (a, b) => `Comparaison : ${a} vs ${b}`,
+    compSub: (a, b) => `Analyse de l’écart numérique entre ${a} et ${b}`,
+    emptyTitle: 'Aucune donnée importée pour ce projet',
+    emptyDescUpload: 'Allez dans Importer un fichier, choisissez ce projet et chargez un fichier Excel ou CSV.',
+    emptyDescViewer: 'Votre équipe n’a pas encore importé de fichiers pour ce projet.',
+    uploadNowBtn: 'Importer un fichier maintenant',
+  },
+  ru: {
+    loadingMsg: 'Анализ данных проекта и построение графиков...',
+    defaultTitle: 'Дашборд проекта',
+    subtitle: 'Интерактивная панель аналитики — наведите курсор на график для просмотра деталей',
+    refreshingBtn: 'Обновление...',
+    refreshBtn: 'Обновить анализ',
+    reportsBtn: 'Отчёты и рекомендации',
+    uploadBtn: 'Загрузить файл',
+    projectsBtn: 'Проекты',
+    actualLegend: 'Факт',
+    baselineLegend: 'База',
+    actualTooltip: 'Фактическое значение',
+    baselineTooltip: 'Базовый уровень',
+    otherCategories: 'Другие категории',
+    recordsUnit: 'записей',
+    segmentLabel: 'Сегмент',
+    trendTitle: 'Динамика показателей проекта',
+    trendSubtitle: 'Фактические показатели в сравнении со статистической базой',
+    metricsDistTitle: 'Сводка статистических показателей',
+    metricsDistSubtitle: 'Сравнение значений и средних величин по столбцам файла',
+    peakAvgKpi: 'Максимальное среднее значение',
+    peakBadge: 'Пик показателей',
+    totalCasesKpi: 'Всего проанализировано',
+    variablesUnit: 'переменных',
+    extractedInsightsKpi: 'Извлечённые выводы',
+    activeAnalysisBadge: 'Активный анализ',
+    avgPrefix: 'Средн.',
+    sharePrefix: 'Доля',
+    shareDistTitle: (cat) => `Распределение по: ${cat}`,
+    shareDistSub: (lbl) => `Доля (${lbl}) от общего числа записей`,
+    compTitle: (a, b) => `Сравнение: ${a} и ${b}`,
+    compSub: (a, b) => `Анализ числовой разницы между ${a} и ${b}`,
+    emptyTitle: 'Для этого проекта ещё не загружены данные',
+    emptyDescUpload: 'Перейдите в раздел загрузки данных, выберите проект и загрузите файл Excel или CSV.',
+    emptyDescViewer: 'Команда ещё не загрузила файлы для этого проекта.',
+    uploadNowBtn: 'Загрузить файл сейчас',
+  },
+  tr: {
+    loadingMsg: 'Proje verileri analiz ediliyor ve grafikler oluşturuluyor...',
+    defaultTitle: 'Proje Kontrol Paneli',
+    subtitle: 'Etkileşimli veri analizi paneli — ayrıntılı değerleri görmek için grafiklerin üzerine gelin',
+    refreshingBtn: 'Güncelleniyor...',
+    refreshBtn: 'Analizi Yenile',
+    reportsBtn: 'Raporlar ve Öneriler',
+    uploadBtn: 'Dosya Yükle',
+    projectsBtn: 'Projeler',
+    actualLegend: 'Gerçekleşen',
+    baselineLegend: 'Temel Çizgi',
+    actualTooltip: 'Gerçekleşen Değer',
+    baselineTooltip: 'Temel Değer',
+    otherCategories: 'Diğer kategoriler',
+    recordsUnit: 'kayıt',
+    segmentLabel: 'Segment',
+    trendTitle: 'Proje Metrikleri Gelişim Seyri',
+    trendSubtitle: 'İstatistiksel temel çizgiye kıyasla gerçekleşen performans',
+    metricsDistTitle: 'İstatistiksel Metrik Özeti',
+    metricsDistSubtitle: 'Dosya sütunlarından çıkarılan değerlerin ve ortalamaların karşılaştırması',
+    peakAvgKpi: 'Kaydedilen En Yüksek Ortalama',
+    peakBadge: 'Zirve Metrik',
+    totalCasesKpi: 'Analiz Edilen Toplam Kayıt',
+    variablesUnit: 'değişken',
+    extractedInsightsKpi: 'Çıkarılan İçgörüler',
+    activeAnalysisBadge: 'Aktif Analiz',
+    avgPrefix: 'Ort.',
+    sharePrefix: 'Payı:',
+    shareDistTitle: (cat) => `${cat} Bazında Pay Dağılımı`,
+    shareDistSub: (lbl) => `Toplam kayıtlar içinde (${lbl}) payı`,
+    compTitle: (a, b) => `Karşılaştırma: ${a} ve ${b}`,
+    compSub: (a, b) => `${a} ile ${b} arasındaki sayısal fark analizi`,
+    emptyTitle: 'Bu proje için henüz veri yüklenmedi',
+    emptyDescUpload: 'Veri Yükle sayfasına gidin, bu projeyi seçin ve bir Excel veya CSV dosyası yükleyin.',
+    emptyDescViewer: 'Ekibiniz henüz bu proje için veri dosyası yüklemedi.',
+    uploadNowBtn: 'Şimdi Bu Projeye Dosya Yükle',
+  },
+}
+
 export default function ProjectDashboardPage() {
   const params = useParams()
   const projectId = (params?.projectId || params?.id) as string
   const { activeWorkspaceId, canAnalyzeAndUpload, loading: roleLoading } = useWorkspaceRole()
+  const { lang } = useTranslation()
+  const L = PROJECT_DASH_LOCALES[lang] || PROJECT_DASH_LOCALES.en
+
   const [project, setProject] = useState<any>(null)
   const [datasets, setDatasets] = useState<any[]>([])
   const [selectedDatasetIndex, setSelectedDatasetIndex] = useState<number>(0)
@@ -121,17 +463,16 @@ export default function ProjectDashboardPage() {
         Array.isArray(remoteFiles) && remoteFiles.length > 0 ? remoteFiles : cachedFiles
 
       if (Array.isArray(sourceList) && sourceList.length > 0) {
-        // إزالة أي ملفات مكررة بنفس الاسم والاحتفاظ بالأحدث
         const uniqueByName = new Map<string, any>()
         sourceList.forEach((item: any) => {
-          const fname = item.fileName || item.originalFileName || item.name || 'ملف بيانات'
+          const fname = item.fileName || item.originalFileName || item.name || 'Dataset'
           uniqueByName.set(fname, item)
         })
 
         const hydrated = await Promise.all(
           Array.from(uniqueByName.values()).map(async (rf: any) => {
             const dsId = rf.datasetId || rf.id
-            const fname = rf.fileName || rf.originalFileName || rf.name || 'ملف بيانات'
+            const fname = rf.fileName || rf.originalFileName || rf.name || 'Dataset'
             const localMatch = cachedMap.get(dsId) || cachedMap.get(fname)
 
             let insightsList: any[] =
@@ -139,7 +480,6 @@ export default function ProjectDashboardPage() {
                 ? localMatch.insights
                 : []
 
-            // إذا لم تكن الرؤى موجودة محلياً، نستدعي معالجة وتحليل الباك إند
             if (insightsList.length === 0 && dsId) {
               await apiRequest<any>(`/api/analytics/datasets/${dsId}/process`, {
                 method: 'POST',
@@ -161,7 +501,7 @@ export default function ProjectDashboardPage() {
               const rawInsights = insRes?.insights || insRes?.Insights || []
               if (Array.isArray(rawInsights) && rawInsights.length > 0) {
                 insightsList = rawInsights.map((item: any) => ({
-                  title: item.title || item.Title || 'مؤشر تحليلي',
+                  title: item.title || item.Title || 'Metric',
                   description: item.description || item.Description || item.message || '',
                 }))
               }
@@ -170,23 +510,22 @@ export default function ProjectDashboardPage() {
             const rows = rf.rowCount ?? localMatch?.rowCount ?? 0
             const cols = rf.columnCount ?? localMatch?.columnCount ?? 0
 
-            // إذا لم يرجع محرك الباك إند رؤى نصية جاهزة، نولّد رؤى إحصائية دقيقة من أبعاد الملف الفعلية
             if (insightsList.length === 0 && (rows > 0 || cols > 0)) {
               const cellsCount = rows * cols
               insightsList = [
                 {
-                  title: `حجم البيانات المحللة (${fname})`,
-                  description: `تمت معالجة ${rows} صف و ${cols} متغيرات بإجمالي ${cellsCount} خلية بيانات مكتملة. التوصية: استخدم مركز التحليلات لتصفية المتغيرات ذات الأولوية.`,
+                  title: `Dataset Size (${fname})`,
+                  description: `${rows} rows & ${cols} variables (${cellsCount} cells).`,
                 },
                 {
-                  title: `مقارنة الأداء بين 'السجلات الكلية' و 'الأبعاد التحليلية'`,
-                  description: `بلغت القيمة ${rows} في 'السجلات الكلية' مقابل ${cols} في 'الأبعاد التحليلية' بنسبة تغير +${
+                  title: `مقارنة الأداء بين 'Total Records' و 'Dimensions'`,
+                  description: `بلغت القيمة ${rows} في 'Total Records' مقابل ${cols} في 'Dimensions' بنسبة تغير +${
                     cols > 0 ? Math.min(99, Math.round((rows / cols) * 10)) : 25
                   }%.`,
                 },
                 {
-                  title: `توزيع السجلات حسب (حالة المعالجة)`,
-                  description: `تتصدر فئة 'سجلات صالحة للتحليل' بواقع ${rows} سجل من إجمالي البيانات المرفوعة.`,
+                  title: `توزيع السجلات حسب (Status)`,
+                  description: `تتصدر فئة 'Valid Records' بواقع ${rows} سجل.`,
                 },
               ]
             }
@@ -280,8 +619,8 @@ export default function ProjectDashboardPage() {
         widgets.push({
           id: `comp-${idx}`,
           chartType: 'comparison_bar',
-          title: title.replace('مقارنة الأداء بين', 'مقارنة مؤشر'),
-          subtitle: `تحليل الفروق الرقمية بين ${items[0].label} و ${items[1].label}`,
+          title: L.compTitle(items[0].label, items[1].label),
+          subtitle: L.compSub(items[0].label, items[1].label),
           items,
           changePct: changeStr,
           isNegative: isNeg,
@@ -289,8 +628,8 @@ export default function ProjectDashboardPage() {
 
         if (kpis.length < 2) {
           kpis.push({
-            title: `متوسط ${items[1].label}`,
-            value: items[1].value.toLocaleString(),
+            title: `${L.avgPrefix} ${items[1].label}`,
+            value: items[1].value.toLocaleString(lang),
             change: changeStr,
             isNegative: isNeg,
             sparkline: isNeg
@@ -325,13 +664,13 @@ export default function ProjectDashboardPage() {
         const total = totalRecords > 0 ? totalRecords : primaryCount
         const pct = Math.min(100, Math.max(1, Math.round((primaryCount / total) * 100)))
         const catMatch = title.match(/حسب\s*\(([^)]+)\)/)
-        const catName = catMatch ? catMatch[1] : 'التصنيف'
+        const catName = catMatch ? catMatch[1] : 'Category'
 
         widgets.push({
           id: `donut-${idx}`,
           chartType: 'donut_share',
-          title: `توزيع الحصص حسب ${catName}`,
-          subtitle: `استحواذ شريحة (${labelMatch[1]}) من إجمالي السجلات`,
+          title: L.shareDistTitle(catName),
+          subtitle: L.shareDistSub(labelMatch[1]),
           primaryLabel: labelMatch[1],
           primaryCount,
           secondaryCount: Math.max(0, total - primaryCount),
@@ -340,9 +679,9 @@ export default function ProjectDashboardPage() {
 
         if (kpis.length < 3) {
           kpis.push({
-            title: `حصة ${labelMatch[1]}`,
+            title: `${L.sharePrefix} ${labelMatch[1]}`,
             value: `${pct}%`,
-            change: `${primaryCount} سجل`,
+            change: `${primaryCount.toLocaleString(lang)} ${L.recordsUnit}`,
             isNegative: false,
             sparkline: 'M2 22 L22 17 L42 15 L60 9 L78 4',
             icon: 'award',
@@ -370,8 +709,8 @@ export default function ProjectDashboardPage() {
       widgets.push({
         id: 'data-metrics-bars',
         chartType: 'metric_distribution',
-        title: 'ملخص المؤشرات الإحصائية للبيانات',
-        subtitle: 'مقارنة القيم والمتوسطات المستخرجة من أعمدة الملف',
+        title: L.metricsDistTitle,
+        subtitle: L.metricsDistSubtitle,
         metrics: extractedBarsForDistribution.slice(0, 5).map((b) => ({
           ...b,
           pct: Math.min(100, Math.max(12, Math.round((b.value / maxDist) * 100))),
@@ -388,8 +727,8 @@ export default function ProjectDashboardPage() {
       widgets.unshift({
         id: 'master-trend',
         chartType: 'trend_line',
-        title: 'مسار تطور مؤشرات المشروع',
-        subtitle: 'الأداء الفعلي للمتغيرات مقابل خط الأساس الإحصائي',
+        title: L.trendTitle,
+        subtitle: L.trendSubtitle,
         points: allSeriesPoints,
         changePct: `${Number(diffPct) > 0 ? '+' : ''}${diffPct}%`,
         isNegative: isNeg,
@@ -400,9 +739,9 @@ export default function ProjectDashboardPage() {
       if (allSeriesPoints.length > 0 && kpis.length < 4) {
         const peak = Math.max(...allSeriesPoints.map((p) => p.actual))
         kpis.push({
-          title: 'أعلى متوسط مسجل',
-          value: peak.toLocaleString(),
-          change: 'ذروة المؤشرات',
+          title: L.peakAvgKpi,
+          value: peak.toLocaleString(lang),
+          change: L.peakBadge,
           isNegative: false,
           sparkline: 'M2 26 L22 21 L44 13 L62 15 L78 3',
           icon: 'award',
@@ -410,9 +749,9 @@ export default function ProjectDashboardPage() {
       }
       if (kpis.length < 4) {
         kpis.push({
-          title: 'إجمالي الحالات المحللة',
-          value: totalRecords.toLocaleString(),
-          change: `${activeDataset.columnCount ?? 0} متغيرات`,
+          title: L.totalCasesKpi,
+          value: totalRecords.toLocaleString(lang),
+          change: `${activeDataset.columnCount ?? 0} ${L.variablesUnit}`,
           isNegative: false,
           sparkline: 'M2 24 L20 18 L40 20 L60 11 L78 5',
           icon: 'layers',
@@ -420,9 +759,9 @@ export default function ProjectDashboardPage() {
       }
       if (kpis.length < 4) {
         kpis.push({
-          title: 'الرؤى المستخرجة',
+          title: L.extractedInsightsKpi,
           value: `${insights.length}`,
-          change: 'تحليل نشط',
+          change: L.activeAnalysisBadge,
           isNegative: false,
           sparkline: 'M2 20 L25 18 L45 12 L65 8 L78 4',
           icon: 'target',
@@ -434,15 +773,13 @@ export default function ProjectDashboardPage() {
       smartWidgets: widgets,
       businessKpis: kpis.slice(0, 4),
     }
-  }, [insights, totalRecords, activeDataset])
+  }, [insights, totalRecords, activeDataset, L, lang])
 
   if (loading || roleLoading) {
     return (
       <DashboardShell>
         <div className="flex h-96 items-center justify-center">
-          <p className="animate-pulse text-sm text-muted-foreground">
-            جاري تحليل بيانات المشروع وبناء الرسوم البيانية...
-          </p>
+          <p className="animate-pulse text-sm text-muted-foreground">{L.loadingMsg}</p>
         </div>
       </DashboardShell>
     )
@@ -460,7 +797,7 @@ export default function ProjectDashboardPage() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold tracking-tight">
-                  {project?.name || 'لوحة تحكم المشروع'}
+                  {project?.name || L.defaultTitle}
                 </h1>
                 {activeDataset && (
                   <span className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">
@@ -468,9 +805,7 @@ export default function ProjectDashboardPage() {
                   </span>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
-                لوحة تحليل البيانات التفاعلية — مرر المؤشر فوق أي رسم بياني لعرض القيم التفصيلية
-              </p>
+              <p className="text-xs text-muted-foreground">{L.subtitle}</p>
             </div>
           </div>
 
@@ -496,7 +831,7 @@ export default function ProjectDashboardPage() {
                 className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-secondary/70 px-3 py-2 text-xs font-medium hover:bg-secondary disabled:opacity-50"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${reanalyzing ? 'animate-spin' : ''}`} />
-                {reanalyzing ? 'جاري التحديث...' : 'تحديث التحليل'}
+                {reanalyzing ? L.refreshingBtn : L.refreshBtn}
               </button>
             )}
             <Link
@@ -504,7 +839,7 @@ export default function ProjectDashboardPage() {
               className="inline-flex items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-3.5 py-2 text-xs font-medium text-primary hover:bg-primary/20"
             >
               <FileText className="h-3.5 w-3.5" />
-              التقارير والتوصيات
+              {L.reportsBtn}
               <ArrowUpRight className="h-3.5 w-3.5" />
             </Link>
             {canAnalyzeAndUpload && (
@@ -513,7 +848,7 @@ export default function ProjectDashboardPage() {
                 className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
               >
                 <Upload className="h-3.5 w-3.5" />
-                رفع ملف
+                {L.uploadBtn}
               </Link>
             )}
             <Link
@@ -521,7 +856,7 @@ export default function ProjectDashboardPage() {
               className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-secondary px-3.5 py-2 text-xs font-medium hover:bg-secondary/80"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              المشاريع
+              {L.projectsBtn}
             </Link>
           </div>
         </div>
@@ -568,7 +903,7 @@ export default function ProjectDashboardPage() {
                       strokeLinejoin="round"
                     />
                   </svg>
-                  <div className="text-left">
+                  <div className="text-end">
                     <p className="text-2xl font-bold tracking-tight">{kpi.value}</p>
                     <p className="max-w-[130px] truncate text-xs text-muted-foreground">
                       {kpi.title}
@@ -627,13 +962,14 @@ export default function ProjectDashboardPage() {
                     <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-4 text-xs">
                         <span className="flex items-center gap-1.5 font-medium text-foreground">
-                          <span className="h-2.5 w-5 rounded-full bg-primary" /> الفعلي
+                          <span className="h-2.5 w-5 rounded-full bg-primary" /> {L.actualLegend}
                         </span>
                         <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
-                          <span className="h-0.5 w-5 border-t-2 border-dashed border-slate-400" /> خط الأساس
+                          <span className="h-0.5 w-5 border-t-2 border-dashed border-slate-400" />{' '}
+                          {L.baselineLegend}
                         </span>
                       </div>
-                      <div className="text-right">
+                      <div className="text-end">
                         <div className="flex items-center justify-end gap-2">
                           <h3 className="text-base font-bold">{widget.title}</h3>
                           <LineChart className="h-4 w-4 text-primary" />
@@ -758,24 +1094,26 @@ export default function ProjectDashboardPage() {
                           className="pointer-events-none absolute top-3 z-20 min-w-[165px] -translate-x-1/2 rounded-xl border border-border bg-slate-950/95 p-3 shadow-2xl backdrop-blur-md"
                           style={{ left: `${(pts[activeHoverIdx].x / w) * 100}%` }}
                         >
-                          <p className="mb-1.5 text-right text-xs font-bold text-foreground">
+                          <p className="mb-1.5 text-end text-xs font-bold text-foreground">
                             {pts[activeHoverIdx].label}
                           </p>
                           <div className="space-y-1 text-xs">
                             <div className="flex items-center justify-between gap-4">
                               <span className="font-bold text-slate-300">
-                                {pts[activeHoverIdx].benchmark.toLocaleString()}
+                                {pts[activeHoverIdx].benchmark.toLocaleString(lang)}
                               </span>
                               <span className="flex items-center gap-1.5 text-muted-foreground">
-                                خط الأساس <span className="h-2 w-2 rounded-full bg-slate-400" />
+                                {L.baselineTooltip}{' '}
+                                <span className="h-2 w-2 rounded-full bg-slate-400" />
                               </span>
                             </div>
                             <div className="flex items-center justify-between gap-4">
                               <span className="font-bold text-primary">
-                                {pts[activeHoverIdx].actual.toLocaleString()}
+                                {pts[activeHoverIdx].actual.toLocaleString(lang)}
                               </span>
                               <span className="flex items-center gap-1.5 text-muted-foreground">
-                                القيمة الفعلية <span className="h-2 w-2 rounded-full bg-primary" />
+                                {L.actualTooltip}{' '}
+                                <span className="h-2 w-2 rounded-full bg-primary" />
                               </span>
                             </div>
                           </div>
@@ -805,7 +1143,7 @@ export default function ProjectDashboardPage() {
                   >
                     <div className="flex items-start justify-between">
                       <PieChart className="h-5 w-5 text-primary" />
-                      <div className="text-right">
+                      <div className="text-end">
                         <h3 className="text-base font-bold">{widget.title}</h3>
                         <p className="mt-0.5 text-xs text-muted-foreground">{widget.subtitle}</p>
                       </div>
@@ -840,7 +1178,7 @@ export default function ProjectDashboardPage() {
                         >
                           <span className="font-bold text-foreground">{remPct}%</span>
                           <span className="flex items-center gap-2 text-muted-foreground">
-                            <span>فئات أخرى</span>
+                            <span>{L.otherCategories}</span>
                             <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
                           </span>
                         </div>
@@ -883,9 +1221,11 @@ export default function ProjectDashboardPage() {
                         </svg>
                         <div className="pointer-events-none absolute flex flex-col items-center text-center">
                           <span className="text-base font-bold">
-                            {activeHoverIdx === 1 ? widget.secondaryCount : widget.primaryCount}
+                            {activeHoverIdx === 1
+                              ? widget.secondaryCount.toLocaleString(lang)
+                              : widget.primaryCount.toLocaleString(lang)}
                           </span>
-                          <span className="text-[10px] text-muted-foreground">سجل</span>
+                          <span className="text-[10px] text-muted-foreground">{L.recordsUnit}</span>
                         </div>
                       </div>
                     </div>
@@ -893,15 +1233,20 @@ export default function ProjectDashboardPage() {
                     <div className="rounded-xl border border-border/60 bg-background/50 px-3 py-2 text-center text-xs text-muted-foreground">
                       {activeHoverIdx === 1 ? (
                         <span>
-                          الفئات الأخرى:{' '}
-                          <strong className="text-emerald-400">{widget.secondaryCount} سجل</strong> (
-                          {remPct}%)
+                          {L.otherCategories}:{' '}
+                          <strong className="text-emerald-400">
+                            {widget.secondaryCount.toLocaleString(lang)} {L.recordsUnit}
+                          </strong>{' '}
+                          ({remPct}%)
                         </span>
                       ) : (
                         <span>
-                          شريحة <strong className="text-foreground">{widget.primaryLabel}</strong>:{' '}
-                          <strong className="text-primary">{widget.primaryCount} سجل</strong> (
-                          {widget.percentage}%)
+                          {L.segmentLabel}{' '}
+                          <strong className="text-foreground">{widget.primaryLabel}</strong>:{' '}
+                          <strong className="text-primary">
+                            {widget.primaryCount.toLocaleString(lang)} {L.recordsUnit}
+                          </strong>{' '}
+                          ({widget.percentage}%)
                         </span>
                       )}
                     </div>
@@ -934,7 +1279,7 @@ export default function ProjectDashboardPage() {
                         )}
                         {widget.changePct}
                       </span>
-                      <div className="text-right">
+                      <div className="text-end">
                         <div className="flex items-center justify-end gap-2">
                           <h3 className="text-base font-bold">{widget.title}</h3>
                           <BarChart3 className="h-4 w-4 text-primary" />
@@ -958,10 +1303,12 @@ export default function ProjectDashboardPage() {
                           >
                             <span
                               className={`rounded-md px-2 py-0.5 text-xs font-bold transition-all ${
-                                isHov ? 'bg-primary text-primary-foreground shadow' : 'text-foreground'
+                                isHov
+                                  ? 'bg-primary text-primary-foreground shadow'
+                                  : 'text-foreground'
                               }`}
                             >
-                              {bar.value.toLocaleString()}
+                              {bar.value.toLocaleString(lang)}
                             </span>
                             <div className="flex w-full max-w-[64px] flex-1 items-end">
                               <div
@@ -992,7 +1339,7 @@ export default function ProjectDashboardPage() {
                   >
                     <div className="mb-4 flex items-start justify-between">
                       <Activity className="h-5 w-5 text-cyan-400" />
-                      <div className="text-right">
+                      <div className="text-end">
                         <h3 className="text-base font-bold">{widget.title}</h3>
                         <p className="mt-0.5 text-xs text-muted-foreground">{widget.subtitle}</p>
                       </div>
@@ -1007,7 +1354,7 @@ export default function ProjectDashboardPage() {
                                 m.isNegative ? 'text-red-400' : 'text-primary'
                               }`}
                             >
-                              {m.value.toLocaleString()}
+                              {m.value.toLocaleString(lang)}
                             </span>
                             <span className="font-medium text-muted-foreground">{m.label}</span>
                           </div>
@@ -1036,18 +1383,16 @@ export default function ProjectDashboardPage() {
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary">
               <BarChart3 className="h-6 w-6" />
             </div>
-            <h3 className="text-base font-semibold">لا توجد بيانات مرفوعة لهذا المشروع بعد</h3>
+            <h3 className="text-base font-semibold">{L.emptyTitle}</h3>
             <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
-              {canAnalyzeAndUpload
-                ? 'اذهب إلى صفحة رفع البيانات، اختر هذا المشروع، وارفع ملف Excel أو CSV لتظهر هنا مؤشرات الأعمال والرسوم البيانية المتكاملة.'
-                : 'لم يقم فريق العمل برفع أي ملفات بيانات لهذا المشروع بعد.'}
+              {canAnalyzeAndUpload ? L.emptyDescUpload : L.emptyDescViewer}
             </p>
             {canAnalyzeAndUpload && (
               <Link
                 href="/upload"
                 className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-medium text-primary-foreground shadow hover:bg-primary/90"
               >
-                رفع ملف لهذا المشروع الآن
+                {L.uploadNowBtn}
               </Link>
             )}
           </div>
