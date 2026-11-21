@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
 import { apiRequest, getSession } from '@/lib/api'
@@ -412,6 +412,7 @@ export default function ProjectDashboardPage() {
   const [selectedDatasetIndex, setSelectedDatasetIndex] = useState<number>(0)
   const [loading, setLoading] = useState(true)
   const [reanalyzing, setReanalyzing] = useState(false)
+  const [translatedMap, setTranslatedMap] = useState<Record<string, string>>({})
 
   const [hoveredWidgetPoint, setHoveredWidgetPoint] = useState<{
     widgetId: string
@@ -563,6 +564,75 @@ export default function ProjectDashboardPage() {
   const activeDataset = datasets[selectedDatasetIndex]
   const insights: Array<{ title: string; description: string }> = activeDataset?.insights ?? []
 
+  // ترجمة تلقائية لعناوين الأعمدة والقيم المستخرجة من الملف عند تغيير اللغة
+  useEffect(() => {
+    if (lang === 'ar' || !activeDataset?.insights?.length) {
+      setTranslatedMap({})
+      return
+    }
+
+    const cacheKey = `insightflow_tr_${lang}_${activeDataset.id || activeDataset.name}`
+    try {
+      const cached = JSON.parse(localStorage.getItem(cacheKey) || '{}')
+      if (cached && Object.keys(cached).length > 0) {
+        setTranslatedMap(cached)
+        return
+      }
+    } catch {
+      // ignore
+    }
+
+    const arabicTexts = new Set<string>()
+    activeDataset.insights.forEach((ins: any) => {
+      const cleanTitle = (ins.title || '').replace(/[()]/g, '').trim()
+      if (/[\u0600-\u06FF]/.test(cleanTitle)) arabicTexts.add(cleanTitle)
+
+      const matches = [
+        ...(ins.description?.matchAll(/حسب\s*\(([^)]+)\)/g) || []),
+        ...(ins.title?.matchAll(/حسب\s*\(([^)]+)\)/g) || []),
+        ...(ins.description?.matchAll(/فئة\s*'([^']+)'/g) || []),
+        ...(ins.description?.matchAll(/في\s*'([^']+)'/g) || []),
+      ]
+      matches.forEach((m) => {
+        if (m[1] && /[\u0600-\u06FF]/.test(m[1])) arabicTexts.add(m[1].trim())
+      })
+    })
+
+    if (arabicTexts.size === 0) return
+
+    const itemsArray = Array.from(arabicTexts)
+    fetch('/api/copilot/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: `Translate each item in this JSON array into language code "${lang}". Return ONLY a valid JSON object mapping each original Arabic string to its translation, with no markdown fences or extra text:\n${JSON.stringify(itemsArray)}`,
+      }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        const raw = (data?.reply || '').replace(/```json|```/g, '').trim()
+        const jsonStart = raw.indexOf('{')
+        const jsonEnd = raw.lastIndexOf('}')
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+          const parsed = JSON.parse(raw.slice(jsonStart, jsonEnd + 1))
+          if (parsed && typeof parsed === 'object') {
+            setTranslatedMap(parsed)
+            localStorage.setItem(cacheKey, JSON.stringify(parsed))
+          }
+        }
+      })
+      .catch(() => null)
+  }, [lang, activeDataset])
+
+  const tr = useCallback(
+    (text: string) => {
+      if (!text || lang === 'ar') return text
+      const trimmed = text.trim()
+      return translatedMap[trimmed] || text
+    },
+    [lang, translatedMap]
+  )
+
   const totalRecords = useMemo(() => {
     if (activeDataset?.rowCount && activeDataset.rowCount > 0) {
       return activeDataset.rowCount
@@ -610,7 +680,7 @@ export default function ProjectDashboardPage() {
 
       if (valueMatches.length >= 2) {
         const items = valueMatches.map((m) => ({
-          label: m[2],
+          label: tr(m[2]),
           value: parseFloat(m[1]),
         }))
         const changeStr = pctMatch ? pctMatch[1] : '+0.0%'
@@ -664,14 +734,15 @@ export default function ProjectDashboardPage() {
         const total = totalRecords > 0 ? totalRecords : primaryCount
         const pct = Math.min(100, Math.max(1, Math.round((primaryCount / total) * 100)))
         const catMatch = title.match(/حسب\s*\(([^)]+)\)/)
-        const catName = catMatch ? catMatch[1] : 'Category'
+        const catName = tr(catMatch ? catMatch[1] : 'Category')
+        const segmentName = tr(labelMatch[1])
 
         widgets.push({
           id: `donut-${idx}`,
           chartType: 'donut_share',
           title: L.shareDistTitle(catName),
-          subtitle: L.shareDistSub(labelMatch[1]),
-          primaryLabel: labelMatch[1],
+          subtitle: L.shareDistSub(segmentName),
+          primaryLabel: segmentName,
           primaryCount,
           secondaryCount: Math.max(0, total - primaryCount),
           percentage: pct,
@@ -679,7 +750,7 @@ export default function ProjectDashboardPage() {
 
         if (kpis.length < 3) {
           kpis.push({
-            title: `${L.sharePrefix} ${labelMatch[1]}`,
+            title: `${L.sharePrefix} ${segmentName}`,
             value: `${pct}%`,
             change: `${primaryCount.toLocaleString(lang)} ${L.recordsUnit}`,
             isNegative: false,
@@ -694,8 +765,9 @@ export default function ProjectDashboardPage() {
       if (anyNumMatch) {
         const numVal = parseFloat(anyNumMatch[1])
         if (!isNaN(numVal)) {
+          const cleanLabel = tr(title.replace(/[()]/g, '').trim())
           extractedBarsForDistribution.push({
-            label: title.replace(/[()]/g, '').slice(0, 28),
+            label: cleanLabel.slice(0, 32),
             value: numVal,
             pct: Math.min(100, Math.max(15, Math.round(numVal))),
             isNegative: desc.includes('انخفاض') || desc.includes('تراجع'),
@@ -773,7 +845,7 @@ export default function ProjectDashboardPage() {
       smartWidgets: widgets,
       businessKpis: kpis.slice(0, 4),
     }
-  }, [insights, totalRecords, activeDataset, L, lang])
+  }, [insights, totalRecords, activeDataset, L, lang, tr])
 
   if (loading || roleLoading) {
     return (
