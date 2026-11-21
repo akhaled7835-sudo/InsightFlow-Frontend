@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
-import { apiRequest, getSession } from '@/lib/api'
+import { getSession } from '@/lib/api'
 import { useWorkspaceRole, saveWorkspaceOverride } from '@/lib/useWorkspaceRole'
+import { useTranslation } from '@/lib/i18n'
 import {
   Settings,
   User,
@@ -16,14 +17,328 @@ import {
   Bell,
 } from 'lucide-react'
 
+const SETTINGS_LOCALES: Record<
+  string,
+  {
+    pageTitle: string
+    pageSubtitle: string
+    roleLabel: string
+    tabProfile: string
+    tabWorkspace: string
+    tabPreferences: string
+    profileSectionTitle: string
+    fullNameLabel: string
+    emailLabel: string
+    jobTitleLabel: string
+    jobTitlePlaceholder: string
+    workspaceSectionTitle: string
+    ownerOnlyNotice: string
+    workspaceNameLabel: string
+    workspaceDescLabel: string
+    workspaceDescPlaceholder: string
+    prefsSectionTitle: string
+    aiStyleLabel: string
+    styleConciseTitle: string
+    styleConciseDesc: string
+    styleBalancedTitle: string
+    styleBalancedDesc: string
+    styleDetailedTitle: string
+    styleDetailedDesc: string
+    autoInsightsTitle: string
+    autoInsightsDesc: string
+    notificationsTitle: string
+    notificationsDesc: string
+    instantNotice: string
+    saveBtn: string
+    savedWorkspaceMsg: string
+    savedGeneralMsg: string
+  }
+> = {
+  en: {
+    pageTitle: 'Account & Workspace Settings',
+    pageSubtitle: 'Customize your personal profile, active workspace details, and AI engine preferences.',
+    roleLabel: 'Role',
+    tabProfile: 'Personal Profile',
+    tabWorkspace: 'Current Workspace',
+    tabPreferences: 'AI & Notifications',
+    profileSectionTitle: 'Personal Account Details',
+    fullNameLabel: 'Full Name',
+    emailLabel: 'Email Address',
+    jobTitleLabel: 'Job Title',
+    jobTitlePlaceholder: 'e.g. Senior Data Analyst / Project Manager',
+    workspaceSectionTitle: 'Workspace Settings',
+    ownerOnlyNotice: 'Editing is restricted to the Workspace Owner',
+    workspaceNameLabel: 'Workspace Name',
+    workspaceDescLabel: 'Department Description & Goals',
+    workspaceDescPlaceholder: 'Add a brief description of this workspace and the analyzed data...',
+    prefsSectionTitle: 'Customize AI Copilot & Notifications',
+    aiStyleLabel: 'AI Copilot Response Style',
+    styleConciseTitle: 'Concise & Direct',
+    styleConciseDesc: 'Quick bullet points and core metrics',
+    styleBalancedTitle: 'Balanced (Recommended)',
+    styleBalancedDesc: 'Clear analysis with actionable advice',
+    styleDetailedTitle: 'Deep Analytical',
+    styleDetailedDesc: 'Detailed breakdown of patterns and anomalies',
+    autoInsightsTitle: 'Auto-Extract Insights on Upload',
+    autoInsightsDesc: 'Analyze columns and detect patterns immediately when uploading Excel or CSV files',
+    notificationsTitle: 'Report & Team Invitation Alerts',
+    notificationsDesc: 'Notify you when new members join or executive reports finish generating',
+    instantNotice: 'Changes apply immediately to your active session',
+    saveBtn: 'Save Settings',
+    savedWorkspaceMsg: 'Workspace name and description updated successfully.',
+    savedGeneralMsg: 'Changes saved successfully.',
+  },
+  ar: {
+    pageTitle: 'إعدادات الحساب والمساحة',
+    pageSubtitle: 'تخصيص ملفك الشخصي، إعدادات القسم النشط، وتفضيلات محرك الذكاء الاصطناعي',
+    roleLabel: 'الصلاحية',
+    tabProfile: 'الملف الشخصي',
+    tabWorkspace: 'مساحة العمل الحالية',
+    tabPreferences: 'الذكاء الاصطناعي والإشعارات',
+    profileSectionTitle: 'بيانات الحساب الشخصي',
+    fullNameLabel: 'الاسم الكامل',
+    emailLabel: 'البريد الإلكتروني',
+    jobTitleLabel: 'المسمى الوظيفي',
+    jobTitlePlaceholder: 'مثال: محلل بيانات أول / مدير مشاريع',
+    workspaceSectionTitle: 'إعدادات القسم (Workspace)',
+    ownerOnlyNotice: 'التعديل متاح لمالك مساحة العمل فقط',
+    workspaceNameLabel: 'اسم مساحة العمل',
+    workspaceDescLabel: 'وصف القسم وأهدافه',
+    workspaceDescPlaceholder: 'أضف وصفاً مختصراً لمجال عمل هذا القسم ونوع البيانات المحللة...',
+    prefsSectionTitle: 'تخصيص المساعد الذكي والتنبيهات',
+    aiStyleLabel: 'أسلوب إجابات المساعد الذكي (AI Copilot)',
+    styleConciseTitle: 'مختصر ومباشر',
+    styleConciseDesc: 'نقاط سريعة وأرقام أساسية',
+    styleBalancedTitle: 'متوازن (موصى به)',
+    styleBalancedDesc: 'تحليل واضح مع توصيات عملية',
+    styleDetailedTitle: 'تحليلي معمّق',
+    styleDetailedDesc: 'شرح تفصيلي للأنماط والفروق',
+    autoInsightsTitle: 'استخراج الرؤى التلقائي عند الرفع',
+    autoInsightsDesc: 'تحليل الأعمدة واكتشاف الأنماط فور رفع أي ملف Excel أو CSV',
+    notificationsTitle: 'إشعارات التقارير ودعوات الفريق',
+    notificationsDesc: 'تنبيهك عند انضمام عضو جديد أو اكتمال توليد التقارير التنفيذية',
+    instantNotice: 'تُطبق التغييرات فوراً على جلستك الحالية',
+    saveBtn: 'حفظ الإعدادات',
+    savedWorkspaceMsg: 'تم تحديث اسم ووصف مساحة العمل بنجاح.',
+    savedGeneralMsg: 'تم حفظ التغييرات بنجاح.',
+  },
+  de: {
+    pageTitle: 'Konto- & Arbeitsbereichs-Einstellungen',
+    pageSubtitle: 'Passen Sie Ihr Profil, den aktiven Arbeitsbereich und die KI-Einstellungen an.',
+    roleLabel: 'Rolle',
+    tabProfile: 'Persönliches Profil',
+    tabWorkspace: 'Aktueller Arbeitsbereich',
+    tabPreferences: 'KI & Benachrichtigungen',
+    profileSectionTitle: 'Persönliche Kontodaten',
+    fullNameLabel: 'Vollständiger Name',
+    emailLabel: 'E-Mail-Adresse',
+    jobTitleLabel: 'Berufsbezeichnung',
+    jobTitlePlaceholder: 'z.B. Senior Datenanalyst / Projektleiter',
+    workspaceSectionTitle: 'Arbeitsbereichs-Einstellungen',
+    ownerOnlyNotice: 'Bearbeitung nur für den Inhaber des Arbeitsbereichs möglich',
+    workspaceNameLabel: 'Name des Arbeitsbereichs',
+    workspaceDescLabel: 'Beschreibung & Ziele der Abteilung',
+    workspaceDescPlaceholder: 'Kurze Beschreibung dieses Bereichs und der analysierten Daten...',
+    prefsSectionTitle: 'KI-Assistent & Benachrichtigungen anpassen',
+    aiStyleLabel: 'Antwortstil des KI-Assistenten (AI Copilot)',
+    styleConciseTitle: 'Kurz & Direkt',
+    styleConciseDesc: 'Schnelle Stichpunkte und Kennzahlen',
+    styleBalancedTitle: 'Ausgewogen (Empfohlen)',
+    styleBalancedDesc: 'Klare Analyse mit Handlungsempfehlungen',
+    styleDetailedTitle: 'Tiefgehend Analytisch',
+    styleDetailedDesc: 'Detaillierte Erklärung von Mustern und Abweichungen',
+    autoInsightsTitle: 'Automatische Erkenntnisse beim Hochladen',
+    autoInsightsDesc: 'Spalten analysieren und Muster sofort beim Hochladen von Excel oder CSV erkennen',
+    notificationsTitle: 'Berichts- & Team-Benachrichtigungen',
+    notificationsDesc: 'Benachrichtigung bei neuen Mitgliedern oder fertigen Managementberichten',
+    instantNotice: 'Änderungen werden sofort auf Ihre Sitzung angewendet',
+    saveBtn: 'Einstellungen speichern',
+    savedWorkspaceMsg: 'Name und Beschreibung des Arbeitsbereichs erfolgreich aktualisiert.',
+    savedGeneralMsg: 'Änderungen erfolgreich gespeichert.',
+  },
+  es: {
+    pageTitle: 'Configuración de Cuenta y Espacio de Trabajo',
+    pageSubtitle: 'Personaliza tu perfil, el espacio de trabajo activo y las preferencias de IA.',
+    roleLabel: 'Rol',
+    tabProfile: 'Perfil Personal',
+    tabWorkspace: 'Espacio de Trabajo Actual',
+    tabPreferences: 'IA y Notificaciones',
+    profileSectionTitle: 'Datos de la Cuenta Personal',
+    fullNameLabel: 'Nombre Completo',
+    emailLabel: 'Correo Electrónico',
+    jobTitleLabel: 'Cargo',
+    jobTitlePlaceholder: 'ej. Analista de Datos Senior / Gerente de Proyectos',
+    workspaceSectionTitle: 'Configuración del Espacio de Trabajo',
+    ownerOnlyNotice: 'La edición está restringida al propietario del espacio',
+    workspaceNameLabel: 'Nombre del Espacio de Trabajo',
+    workspaceDescLabel: 'Descripción y Objetivos',
+    workspaceDescPlaceholder: 'Añade una breve descripción de este departamento...',
+    prefsSectionTitle: 'Personalizar Asistente IA y Notificaciones',
+    aiStyleLabel: 'Estilo de Respuesta del Asistente IA',
+    styleConciseTitle: 'Conciso y Directo',
+    styleConciseDesc: 'Puntos clave y métricas principales',
+    styleBalancedTitle: 'Equilibrado (Recomendado)',
+    styleBalancedDesc: 'Análisis claro con recomendaciones prácticas',
+    styleDetailedTitle: 'Analítico Profundo',
+    styleDetailedDesc: 'Desglose detallado de patrones y anomalías',
+    autoInsightsTitle: 'Extraer Hallazgos Automáticamente al Subir',
+    autoInsightsDesc: 'Analizar columnas y detectar patrones al subir archivos Excel o CSV',
+    notificationsTitle: 'Alertas de Informes e Invitaciones',
+    notificationsDesc: 'Notificar cuando se unan nuevos miembros o se generen informes',
+    instantNotice: 'Los cambios se aplican inmediatamente a tu sesión actual',
+    saveBtn: 'Guardar Configuración',
+    savedWorkspaceMsg: 'Nombre y descripción del espacio de trabajo actualizados.',
+    savedGeneralMsg: 'Cambios guardados correctamente.',
+  },
+  it: {
+    pageTitle: 'Impostazioni Account e Area di Lavoro',
+    pageSubtitle: 'Personalizza il profilo, l’area di lavoro attiva e le preferenze IA.',
+    roleLabel: 'Ruolo',
+    tabProfile: 'Profilo Personale',
+    tabWorkspace: 'Area di Lavoro Attuale',
+    tabPreferences: 'IA e Notifiche',
+    profileSectionTitle: 'Dati Account Personale',
+    fullNameLabel: 'Nome Completo',
+    emailLabel: 'Indirizzo Email',
+    jobTitleLabel: 'Qualifica',
+    jobTitlePlaceholder: 'es. Senior Data Analyst / Project Manager',
+    workspaceSectionTitle: 'Impostazioni Area di Lavoro',
+    ownerOnlyNotice: 'Modifica consentita solo al proprietario dell’area di lavoro',
+    workspaceNameLabel: 'Nome Area di Lavoro',
+    workspaceDescLabel: 'Descrizione e Obiettivi',
+    workspaceDescPlaceholder: 'Aggiungi una breve descrizione di questo reparto...',
+    prefsSectionTitle: 'Personalizza Assistente IA e Notifiche',
+    aiStyleLabel: 'Stile di Risposta Assistente IA',
+    styleConciseTitle: 'Conciso e Diretto',
+    styleConciseDesc: 'Punti rapidi e metriche principali',
+    styleBalancedTitle: 'Bilanciato (Consigliato)',
+    styleBalancedDesc: 'Analisi chiara con consigli pratici',
+    styleDetailedTitle: 'Analitico Approfondito',
+    styleDetailedDesc: 'Spiegazione dettagliata di trend e anomalie',
+    autoInsightsTitle: 'Estrazione Automatica al Caricamento',
+    autoInsightsDesc: 'Analizza le colonne e rileva i trend al caricamento di Excel o CSV',
+    notificationsTitle: 'Avvisi Report e Inviti Team',
+    notificationsDesc: 'Notifica quando nuovi membri si uniscono o i report sono pronti',
+    instantNotice: 'Le modifiche vengono applicate immediatamente alla sessione',
+    saveBtn: 'Salva Impostazioni',
+    savedWorkspaceMsg: 'Nome e descrizione dell’area di lavoro aggiornati.',
+    savedGeneralMsg: 'Modifiche salvate con successo.',
+  },
+  fr: {
+    pageTitle: 'Paramètres du Compte et de l’Espace',
+    pageSubtitle: 'Personnalisez votre profil, l’espace de travail actif et les préférences IA.',
+    roleLabel: 'Rôle',
+    tabProfile: 'Profil Personnel',
+    tabWorkspace: 'Espace de Travail Actuel',
+    tabPreferences: 'IA et Notifications',
+    profileSectionTitle: 'Informations du Compte',
+    fullNameLabel: 'Nom Complet',
+    emailLabel: 'Adresse E-mail',
+    jobTitleLabel: 'Poste',
+    jobTitlePlaceholder: 'ex. Data Analyst Senior / Chef de Projet',
+    workspaceSectionTitle: 'Paramètres de l’Espace de Travail',
+    ownerOnlyNotice: 'Modification réservée au propriétaire de l’espace',
+    workspaceNameLabel: 'Nom de l’Espace de Travail',
+    workspaceDescLabel: 'Description et Objectifs',
+    workspaceDescPlaceholder: 'Ajoutez une brève description de ce département...',
+    prefsSectionTitle: 'Personnaliser l’Assistant IA et les Notifications',
+    aiStyleLabel: 'Style de Réponse de l’Assistant IA',
+    styleConciseTitle: 'Concis et Direct',
+    styleConciseDesc: 'Points clés et indicateurs essentiels',
+    styleBalancedTitle: 'Équilibré (Recommandé)',
+    styleBalancedDesc: 'Analyse claire avec recommandations concrètes',
+    styleDetailedTitle: 'Analytique Approfondi',
+    styleDetailedDesc: 'Explication détaillée des tendances et anomalies',
+    autoInsightsTitle: 'Extraction Automatique à l’Importation',
+    autoInsightsDesc: 'Analyser les colonnes dès l’importation d’un fichier Excel ou CSV',
+    notificationsTitle: 'Alertes Rapports et Invitations',
+    notificationsDesc: 'Notifier lors de l’arrivée d’un membre ou de la création d’un rapport',
+    instantNotice: 'Les modifications s’appliquent immédiatement à votre session',
+    saveBtn: 'Enregistrer les Paramètres',
+    savedWorkspaceMsg: 'Nom et description de l’espace mis à jour avec succès.',
+    savedGeneralMsg: 'Modifications enregistrées avec succès.',
+  },
+  ru: {
+    pageTitle: 'Настройки аккаунта и пространства',
+    pageSubtitle: 'Настройте личный профиль, параметры активного отдела и ИИ-движка.',
+    roleLabel: 'Роль',
+    tabProfile: 'Личный профиль',
+    tabWorkspace: 'Текущее пространство',
+    tabPreferences: 'ИИ и уведомления',
+    profileSectionTitle: 'Данные личного аккаунта',
+    fullNameLabel: 'Полное имя',
+    emailLabel: 'Электронная почта',
+    jobTitleLabel: 'Должность',
+    jobTitlePlaceholder: 'например: Старший аналитик данных / Руководитель проектов',
+    workspaceSectionTitle: 'Настройки рабочего пространства',
+    ownerOnlyNotice: 'Редактирование доступно только владельцу пространства',
+    workspaceNameLabel: 'Название пространства',
+    workspaceDescLabel: 'Описание и цели отдела',
+    workspaceDescPlaceholder: 'Добавьте краткое описание этого отдела...',
+    prefsSectionTitle: 'Настройка ИИ-ассистента и уведомлений',
+    aiStyleLabel: 'Стиль ответов ИИ-ассистента',
+    styleConciseTitle: 'Краткий и прямой',
+    styleConciseDesc: 'Быстрые тезисы и ключевые цифры',
+    styleBalancedTitle: 'Сбалансированный (Рекомендуется)',
+    styleBalancedDesc: 'Чёткий анализ с практическими рекомендациями',
+    styleDetailedTitle: 'Глубокий аналитический',
+    styleDetailedDesc: 'Подробный разбор закономерностей и отклонений',
+    autoInsightsTitle: 'Автоматические выводы при загрузке',
+    autoInsightsDesc: 'Анализировать столбцы сразу при загрузке Excel или CSV',
+    notificationsTitle: 'Уведомления об отчётах и команде',
+    notificationsDesc: 'Уведомлять о новых участниках и готовых отчётах',
+    instantNotice: 'Изменения сразу применяются к текущей сессии',
+    saveBtn: 'Сохранить настройки',
+    savedWorkspaceMsg: 'Название и описание пространства успешно обновлены.',
+    savedGeneralMsg: 'Изменения успешно сохранены.',
+  },
+  tr: {
+    pageTitle: 'Hesap ve Çalışma Alanı Ayarları',
+    pageSubtitle: 'Kişisel profilinizi, aktif çalışma alanını ve yapay zeka tercihlerini özelleştirin.',
+    roleLabel: 'Rol',
+    tabProfile: 'Kişisel Profil',
+    tabWorkspace: 'Mevcut Çalışma Alanı',
+    tabPreferences: 'Yapay Zeka ve Bildirimler',
+    profileSectionTitle: 'Kişisel Hesap Bilgileri',
+    fullNameLabel: 'Ad Soyad',
+    emailLabel: 'E-posta Adresi',
+    jobTitleLabel: 'Unvan',
+    jobTitlePlaceholder: 'örn. Kıdemli Veri Analisti / Proje Yöneticisi',
+    workspaceSectionTitle: 'Çalışma Alanı Ayarları',
+    ownerOnlyNotice: 'Düzenleme yalnızca çalışma alanı sahibine açıktır',
+    workspaceNameLabel: 'Çalışma Alanı Adı',
+    workspaceDescLabel: 'Departman Açıklaması ve Hedefleri',
+    workspaceDescPlaceholder: 'Bu departman ve analiz edilen veriler hakkında kısa bir açıklama ekleyin...',
+    prefsSectionTitle: 'Yapay Zeka Asistanı ve Bildirimler',
+    aiStyleLabel: 'Yapay Zeka Asistanı Yanıt Stili',
+    styleConciseTitle: 'Kısa ve Doğrudan',
+    styleConciseDesc: 'Hızlı maddeler ve temel metrikler',
+    styleBalancedTitle: 'Dengeli (Önerilen)',
+    styleBalancedDesc: 'Uygulanabilir önerilerle net analiz',
+    styleDetailedTitle: 'Derin Analitik',
+    styleDetailedDesc: 'Eğilimlerin ve farkların ayrıntılı açıklaması',
+    autoInsightsTitle: 'Yüklemede Otomatik İçgörü Çıkarma',
+    autoInsightsDesc: 'Excel veya CSV dosyaları yüklendiğinde sütunları anında analiz et',
+    notificationsTitle: 'Rapor ve Ekip Daveti Bildirimleri',
+    notificationsDesc: 'Yeni üyeler katıldığında veya raporlar hazırlandığında bildirim al',
+    instantNotice: 'Değişiklikler mevcut oturumunuza anında uygulanır',
+    saveBtn: 'Ayarları Kaydet',
+    savedWorkspaceMsg: 'Çalışma alanı adı ve açıklaması başarıyla güncellendi.',
+    savedGeneralMsg: 'Değişiklikler başarıyla kaydedildi.',
+  },
+}
+
 export default function SettingsPage() {
   const { activeWorkspace, activeWorkspaceId, role, isOwner, refreshWorkspace } =
     useWorkspaceRole()
+  const { lang } = useTranslation()
+  const L = SETTINGS_LOCALES[lang] || SETTINGS_LOCALES.en
+
   const [activeTab, setActiveTab] = useState<'profile' | 'workspace' | 'preferences'>('profile')
 
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
-  const [jobTitle, setJobTitle] = useState('محلل بيانات')
+  const [jobTitle, setJobTitle] = useState('Data Analyst')
 
   const [workspaceName, setWorkspaceName] = useState('')
   const [workspaceDesc, setWorkspaceDesc] = useState('')
@@ -79,38 +394,19 @@ export default function SettingsPage() {
         const cleanName = workspaceName.trim()
         const cleanDesc = workspaceDesc.trim()
 
-        const payload = JSON.stringify({
-          id: activeWorkspaceId,
-          name: cleanName,
-          description: cleanDesc || undefined,
-        })
-
-        // محاولة التحديث على السيرفر عبر PUT أو PATCH
-        try {
-          await apiRequest(`/api/workspaces/${activeWorkspaceId}`, {
-            method: 'PUT',
-            body: payload,
-          })
-        } catch {
-          await apiRequest(`/api/workspaces/${activeWorkspaceId}`, {
-            method: 'PATCH',
-            body: payload,
-          }).catch(() => null)
-        }
-
-        // حفظ التحديث في المخزن المحلي ليظهر فوراً في كل صفحات المنصة
-        saveWorkspaceOverride(activeWorkspaceId, {
+        // حفظ التحديث محلياً ومزامنته مع الباك إند عبر saveWorkspaceOverride
+        await saveWorkspaceOverride(activeWorkspaceId, {
           name: cleanName,
           description: cleanDesc,
         })
 
         await refreshWorkspace()
-        setSavedNotice('تم تحديث اسم ووصف مساحة العمل بنجاح.')
-        setTimeout(() => window.location.reload(), 600)
+        setSavedNotice(L.savedWorkspaceMsg)
+        setTimeout(() => setSavedNotice(''), 3500)
         return
       }
 
-      setSavedNotice('تم حفظ التغييرات بنجاح.')
+      setSavedNotice(L.savedGeneralMsg)
       setTimeout(() => setSavedNotice(''), 3500)
     } finally {
       setSaving(false)
@@ -127,16 +423,14 @@ export default function SettingsPage() {
               <Settings className="h-6 w-6" />
             </span>
             <div>
-              <h1 className="text-xl font-bold tracking-tight">إعدادات الحساب والمساحة</h1>
-              <p className="text-xs text-muted-foreground">
-                تخصيص ملفك الشخصي، إعدادات القسم النشط، وتفضيلات محرك الذكاء الاصطناعي
-              </p>
+              <h1 className="text-xl font-bold tracking-tight">{L.pageTitle}</h1>
+              <p className="text-xs text-muted-foreground">{L.pageSubtitle}</p>
             </div>
           </div>
 
           <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
             <ShieldCheck className="h-3.5 w-3.5" />
-            الصلاحية: {role || 'Owner'}
+            {L.roleLabel}: {role || 'Owner'}
           </span>
         </div>
 
@@ -152,7 +446,7 @@ export default function SettingsPage() {
             }`}
           >
             <User className="h-3.5 w-3.5" />
-            الملف الشخصي
+            {L.tabProfile}
           </button>
 
           <button
@@ -165,7 +459,7 @@ export default function SettingsPage() {
             }`}
           >
             <Building2 className="h-3.5 w-3.5" />
-            مساحة العمل الحالية
+            {L.tabWorkspace}
           </button>
 
           <button
@@ -178,7 +472,7 @@ export default function SettingsPage() {
             }`}
           >
             <Sparkles className="h-3.5 w-3.5" />
-            الذكاء الاصطناعي والإشعارات
+            {L.tabPreferences}
           </button>
         </div>
 
@@ -186,10 +480,12 @@ export default function SettingsPage() {
         <form onSubmit={handleSave} className="rounded-2xl border border-border bg-card/50 p-6">
           {activeTab === 'profile' && (
             <div className="space-y-4">
-              <h2 className="text-base font-semibold">بيانات الحساب الشخصي</h2>
+              <h2 className="text-base font-semibold">{L.profileSectionTitle}</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">الاسم الكامل</label>
+                  <label className="text-xs font-medium text-muted-foreground">
+                    {L.fullNameLabel}
+                  </label>
                   <input
                     type="text"
                     value={fullName}
@@ -199,7 +495,9 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">البريد الإلكتروني</label>
+                  <label className="text-xs font-medium text-muted-foreground">
+                    {L.emailLabel}
+                  </label>
                   <input
                     type="email"
                     value={email}
@@ -209,12 +507,14 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="space-y-1.5 sm:col-span-2">
-                  <label className="text-xs font-medium text-muted-foreground">المسمى الوظيفي</label>
+                  <label className="text-xs font-medium text-muted-foreground">
+                    {L.jobTitleLabel}
+                  </label>
                   <input
                     type="text"
                     value={jobTitle}
                     onChange={(e) => setJobTitle(e.target.value)}
-                    placeholder="مثال: محلل بيانات أول / مدير مشاريع"
+                    placeholder={L.jobTitlePlaceholder}
                     className="h-10 w-full rounded-xl border border-input bg-background/60 px-3 text-sm outline-none focus:border-primary"
                   />
                 </div>
@@ -225,17 +525,15 @@ export default function SettingsPage() {
           {activeTab === 'workspace' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold">إعدادات القسم (Workspace)</h2>
-                {!isOwner && (
-                  <span className="text-xs text-amber-400">
-                    التعديل متاح لمالك مساحة العمل فقط
-                  </span>
-                )}
+                <h2 className="text-base font-semibold">{L.workspaceSectionTitle}</h2>
+                {!isOwner && <span className="text-xs text-amber-400">{L.ownerOnlyNotice}</span>}
               </div>
 
               <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">اسم مساحة العمل</label>
+                  <label className="text-xs font-medium text-muted-foreground">
+                    {L.workspaceNameLabel}
+                  </label>
                   <input
                     type="text"
                     value={workspaceName}
@@ -246,13 +544,15 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">وصف القسم وأهدافه</label>
+                  <label className="text-xs font-medium text-muted-foreground">
+                    {L.workspaceDescLabel}
+                  </label>
                   <textarea
                     rows={3}
                     value={workspaceDesc}
                     disabled={!isOwner}
                     onChange={(e) => setWorkspaceDesc(e.target.value)}
-                    placeholder="أضف وصفاً مختصراً لمجال عمل هذا القسم ونوع البيانات المحللة..."
+                    placeholder={L.workspaceDescPlaceholder}
                     className="w-full rounded-xl border border-input bg-background/60 p-3 text-sm outline-none focus:border-primary disabled:opacity-60"
                   />
                 </div>
@@ -262,17 +562,15 @@ export default function SettingsPage() {
 
           {activeTab === 'preferences' && (
             <div className="space-y-5">
-              <h2 className="text-base font-semibold">تخصيص المساعد الذكي والتنبيهات</h2>
+              <h2 className="text-base font-semibold">{L.prefsSectionTitle}</h2>
 
               <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">
-                  أسلوب إجابات المساعد الذكي (AI Copilot)
-                </label>
+                <label className="text-xs font-medium text-muted-foreground">{L.aiStyleLabel}</label>
                 <div className="grid gap-3 sm:grid-cols-3">
                   {[
-                    { id: 'concise', title: 'مختصر ومباشر', desc: 'نقاط سريعة وأرقام أساسية' },
-                    { id: 'balanced', title: 'متوازن (موصى به)', desc: 'تحليل واضح مع توصيات عملية' },
-                    { id: 'detailed', title: 'تحليلي معمّق', desc: 'شرح تفصيلي للأنماط والفروق' },
+                    { id: 'concise', title: L.styleConciseTitle, desc: L.styleConciseDesc },
+                    { id: 'balanced', title: L.styleBalancedTitle, desc: L.styleBalancedDesc },
+                    { id: 'detailed', title: L.styleDetailedTitle, desc: L.styleDetailedDesc },
                   ].map((opt) => (
                     <button
                       key={opt.id}
@@ -294,10 +592,8 @@ export default function SettingsPage() {
               <div className="space-y-3 border-t border-border pt-4">
                 <label className="flex items-center justify-between gap-4 rounded-xl border border-border bg-background/40 p-3.5">
                   <div>
-                    <p className="text-xs font-semibold">استخراج الرؤى التلقائي عند الرفع</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      تحليل الأعمدة واكتشاف الأنماط فور رفع أي ملف Excel أو CSV
-                    </p>
+                    <p className="text-xs font-semibold">{L.autoInsightsTitle}</p>
+                    <p className="text-[11px] text-muted-foreground">{L.autoInsightsDesc}</p>
                   </div>
                   <input
                     type="checkbox"
@@ -311,10 +607,8 @@ export default function SettingsPage() {
                   <div className="flex items-center gap-2.5">
                     <Bell className="h-4 w-4 text-primary" />
                     <div>
-                      <p className="text-xs font-semibold">إشعارات التقارير ودعوات الفريق</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        تنبيهك عند انضمام عضو جديد أو اكتمال توليد التقارير التنفيذية
-                      </p>
+                      <p className="text-xs font-semibold">{L.notificationsTitle}</p>
+                      <p className="text-[11px] text-muted-foreground">{L.notificationsDesc}</p>
                     </div>
                   </div>
                   <input
@@ -336,9 +630,7 @@ export default function SettingsPage() {
                 {savedNotice}
               </span>
             ) : (
-              <span className="text-xs text-muted-foreground">
-                تُطبق التغييرات فوراً على جلستك الحالية
-              </span>
+              <span className="text-xs text-muted-foreground">{L.instantNotice}</span>
             )}
 
             <button
@@ -351,7 +643,7 @@ export default function SettingsPage() {
               ) : (
                 <Save className="h-4 w-4" />
               )}
-              حفظ الإعدادات
+              {L.saveBtn}
             </button>
           </div>
         </form>

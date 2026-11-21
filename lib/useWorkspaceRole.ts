@@ -34,13 +34,28 @@ function getWorkspaceOverrides(): Record<string, { name?: string; description?: 
   }
 }
 
-export function saveWorkspaceOverride(
+export function getCachedProjects(workspaceId: string): any[] {
+  if (typeof window === 'undefined' || !workspaceId) return []
+  try {
+    const raw = JSON.parse(localStorage.getItem(`insightflow_projects_cache_${workspaceId}`) || '[]')
+    return Array.isArray(raw) ? raw : []
+  } catch {
+    return []
+  }
+}
+
+export function setCachedProjects(workspaceId: string, projects: any[]) {
+  if (typeof window === 'undefined' || !workspaceId || !Array.isArray(projects)) return
+  localStorage.setItem(`insightflow_projects_cache_${workspaceId}`, JSON.stringify(projects))
+}
+
+export async function saveWorkspaceOverride(
   workspaceId: string,
   data: { name?: string; description?: string }
 ) {
   if (typeof window === 'undefined' || !workspaceId) return
 
-  // 1. حفظ التعديل في قاموس التخصيصات
+  // 1. حفظ التعديل محلياً فوراً
   const current = getWorkspaceOverrides()
   current[workspaceId] = {
     ...(current[workspaceId] || {}),
@@ -48,7 +63,7 @@ export function saveWorkspaceOverride(
   }
   localStorage.setItem(WORKSPACE_OVERRIDES_KEY, JSON.stringify(current))
 
-  // 2. تحديث القائمة المخبأة مباشرة بنفس الاسم والوصف الجديدين
+  // 2. تحديث القائمة المخبأة
   try {
     const cachedRaw = JSON.parse(localStorage.getItem(WORKSPACE_LIST_CACHE_KEY) || '[]')
     if (Array.isArray(cachedRaw) && cachedRaw.length > 0) {
@@ -67,7 +82,20 @@ export function saveWorkspaceOverride(
     // ignore
   }
 
-  // 3. إبلاغ جميع المكونات المفتوحة (Topbar / Settings / Team / Sidebar) فوراً
+  // 3. مزامنة الاسم الجديد مع الباك إند ليُحفظ في قاعدة البيانات نهائياً
+  try {
+    await apiRequest(`/api/workspaces/${workspaceId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        name: data.name,
+        description: data.description,
+      }),
+    })
+  } catch {
+    // إذا كان الباك إند لا يدعم PUT، يظل الحفظ المحلي فعالاً
+  }
+
+  // 4. إبلاغ جميع المكونات المفتوحة فوراً
   window.dispatchEvent(new Event('insightflow_workspace_updated'))
 }
 
@@ -89,12 +117,12 @@ export function useWorkspaceRole() {
           const ov = overrides[id] || {}
           return {
             id,
-            name: ov.name || w.name || 'مساحة عمل',
+            name: ov.name || w.name || 'Workspace',
             description: ov.description !== undefined ? ov.description : w.description,
           }
         })
 
-      // قراءة النسخة المخبأة فوراً لتجنب ظهور "جاري التحميل..."
+      // قراءة النسخة المخبأة فوراً
       const cachedRaw = JSON.parse(localStorage.getItem(WORKSPACE_LIST_CACHE_KEY) || '[]')
       if (Array.isArray(cachedRaw) && cachedRaw.length > 0) {
         const cachedMapped = applyOverrides(cachedRaw)
@@ -114,7 +142,7 @@ export function useWorkspaceRole() {
         mappedList = applyOverrides([
           {
             id: session.workspaceId,
-            name: 'مساحة العمل الرئيسية',
+            name: 'Main Workspace',
           },
         ])
       }
