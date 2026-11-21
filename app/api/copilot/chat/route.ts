@@ -16,7 +16,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'الرسالة مطلوبة.' }, { status: 400 })
     }
 
-    // 1. جلب الموديلات المتاحة فعلياً في حساب Groq الخاص بك
+    // جلب الموديلات المتاحة فعلياً في حساب Groq
     let availableIds: string[] = []
     try {
       const modelsRes = await fetch('https://api.groq.com/openai/v1/models', {
@@ -37,10 +37,9 @@ export async function POST(req: Request) {
           )
       }
     } catch {
-      // تجاهل خطأ جلب القائمة واستخدام القائمة الافتراضية
+      // تجاهل
     }
 
-    // ترتيب الموديلات المفضلة (البحث الحي أولاً ثم أقوى نماذج المحادثة المتاحة)
     const preferredOrder = [
       'groq/compound',
       'groq/compound-mini',
@@ -62,11 +61,20 @@ export async function POST(req: Request) {
         ? prioritizedModels.slice(0, 5)
         : ['groq/compound', 'groq/compound-mini', 'llama-3.1-8b-instant']
 
-    const systemPrompt = `أنت المساعد الذكي لمنصة InsightFlow لتحليل البيانات والأعمال.
-تتصرف كمحلل بيانات وخبير استراتيجي محترف بأسلوب محادثة طبيعي وواضح (مثل ChatGPT)، وتجنب تماماً تكرار نصوص التقارير الجامدة.
-- إذا سألك المستخدم عن بياناته أو مشاريعه أو ملفاته، اعتمد على "سياق القسم النشط" المرفق بدقة.
-- إذا سألك المستخدم سؤالاً عاماً، اقتصادياً، أو يطلب أحدث المعلومات من الإنترنت، ابحث في الويب وقدم إجابة دقيقة مدعومة بالمصادر.
-- أجب باللغة العربية الواضحة والاحترافية (أو بلغة سؤال المستخدم).
+    const systemPrompt = `أنت "المساعد الذكي" المدمج داخل منصة InsightFlow لتحليل البيانات والأعمال.
+تتحدث بأسلوب استشاري ذكي ومباشر وعملـي يناسب مساحة الشريط الجانبي الضيقة (320px).
+
+قواعد صارمة يجب الالتزام بها في كل رد:
+1. **التنسيق المناسب للمساحة الضيقة:** لا تستخدم الجداول (Markdown Tables) أو الرموز الزخرفية المبالغ فيها إطلاقاً. استخدم فقرات قصيرة ونقاطاً مرقمة واضحة ومباشرة.
+2. **الواقعية والالتزام بإمكانيات المنصة:** ميزات منصة InsightFlow الفعلية هي فقط:
+   - رفع ملفات Excel و CSV وربطها بالمشاريع.
+   - لوحة تحكم المشروع التفاعلية (KPIs، منحنيات الاتجاه، التوزيع الفئوي، ومقارنات الأداء).
+   - مركز التحليلات المتقدم (تحديد المقاييس، التجميع حسب الأبعاد، والتصفية).
+   - صفحة "تقارير الذكاء الاصطناعي والتوصيات" لتوليد واستعراض النتائج والتوصيات التنفيذية.
+   - إدارة فريق العمل والصلاحيات (مالك، مدير، محلل، مشاهد).
+   لا تخترع ميزات غير موجودة (مثل Merge Files أو SQLite أو Data Pipelines) ولا تقترح برامج منافسة (مثل Tableau أو Power BI).
+3. **تحليل السياق الفعلي:** اعتمد على "سياق القسم النشط" المرفق أدناه. إذا وجدت ملفات مكررة بنفس الاسم، انصح بتنظيمها بلطف دون افتراض أن المنصة بلا رؤى.
+4. **الإيجاز والاكتمال:** اجعل إجابتك مركزة (بين 120 و 250 كلمة)، عملية، ومكتملة النهاية دائماً باللغة العربية.
 
 سياق القسم النشط حالياً:
 ${JSON.stringify(workspaceContext || {}, null, 2)}`
@@ -75,7 +83,7 @@ ${JSON.stringify(workspaceContext || {}, null, 2)}`
       { role: 'system', content: systemPrompt },
       ...history
         .filter((m: any) => m.id !== 'welcome')
-        .slice(-8)
+        .slice(-6)
         .map((m: any) => ({
           role: m.sender === 'user' ? 'user' : 'assistant',
           content: m.text,
@@ -97,8 +105,8 @@ ${JSON.stringify(workspaceContext || {}, null, 2)}`
         body: JSON.stringify({
           model: modelName,
           messages: formattedMessages,
-          temperature: 0.4,
-          max_tokens: 1024,
+          temperature: 0.35,
+          max_tokens: 1500,
         }),
       })
 
@@ -120,10 +128,10 @@ ${JSON.stringify(workspaceContext || {}, null, 2)}`
     }
 
     const choice = data?.choices?.[0]?.message
-    const replyText =
-      choice?.content?.trim() || 'لم أتمكن من صياغة إجابة، حاول مرة أخرى.'
+    // تنظيف أي وسوم تفكير داخلية <think>...</think> إن وجدت في نماذج Qwen/DeepSeek
+    const rawContent: string = choice?.content || ''
+    const cleanedReply = rawContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
 
-    // استخراج روابط المصادر إذا قام الموديل بالبحث في الإنترنت
     const sources: Array<{ title: string; url: string }> = []
     const seenUrls = new Set<string>()
     const executedTools = choice?.executed_tools || []
@@ -142,7 +150,7 @@ ${JSON.stringify(workspaceContext || {}, null, 2)}`
     }
 
     return NextResponse.json({
-      reply: replyText,
+      reply: cleanedReply || 'لم أتمكن من صياغة إجابة، حاول مرة أخرى.',
       sources: sources.slice(0, 4),
     })
   } catch (error: any) {

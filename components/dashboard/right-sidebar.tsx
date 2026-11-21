@@ -47,6 +47,46 @@ type ChatMessage = {
   sources?: Array<{ title: string; url: string }>
 }
 
+// دالة لتنسيق النص وعرض العناوين والنصوص الغامقة بشكل نظيف بدون رموز Markdown خام
+function FormattedChatText({ text }: { text: string }) {
+  const lines = text.split('\n')
+  return (
+    <div className="space-y-1.5">
+      {lines.map((line, idx) => {
+        const trimmed = line.trim()
+        if (!trimmed) return <div key={idx} className="h-1" />
+
+        // عنوان يبدأ بـ # أو ## أو ###
+        const headingMatch = trimmed.match(/^#{1,4}\s+(.*)$/)
+        if (headingMatch) {
+          return (
+            <p key={idx} className="pt-1 text-xs font-bold text-primary">
+              {headingMatch[1].replace(/\*\*/g, '')}
+            </p>
+          )
+        }
+
+        // تقسيم النصوص الغامقة **text**
+        const parts = trimmed.split(/(\*\*[^*]+\*\*)/g)
+        return (
+          <p key={idx} className="text-xs leading-relaxed">
+            {parts.map((part, pIdx) => {
+              if (part.startsWith('**') && part.endsWith('**')) {
+                return (
+                  <strong key={pIdx} className="font-semibold text-foreground">
+                    {part.slice(2, -2)}
+                  </strong>
+                )
+              }
+              return <span key={pIdx}>{part}</span>
+            })}
+          </p>
+        )
+      })}
+    </div>
+  )
+}
+
 export function RightSidebar() {
   const router = useRouter()
   const { t } = useTranslation()
@@ -105,7 +145,7 @@ export function RightSidebar() {
         )
         setMembersCount(Array.isArray(rawMembers) && rawMembers.length > 0 ? rawMembers.length : 1)
 
-        const collectedDatasets: WorkspaceDatasetSummary[] = []
+        const uniqueDatasetsMap = new Map<string, WorkspaceDatasetSummary>()
         const collectedReports: SavedReportSummary[] = []
         let emptyProjs = 0
 
@@ -119,35 +159,33 @@ export function RightSidebar() {
           const remoteFiles = await apiRequest<any[]>(`/api/projects/${pid}/files`).catch(() => [])
 
           const cachedMap = new Map<string, any>(
-            Array.isArray(cached) ? cached.map((c: any) => [c.id, c]) : []
+            Array.isArray(cached)
+              ? cached.flatMap((c: any) => [
+                  [c.id, c],
+                  [c.name, c],
+                ])
+              : []
           )
 
-          if (Array.isArray(remoteFiles) && remoteFiles.length > 0) {
-            remoteFiles.forEach((rf: any) => {
+          const filesSource =
+            Array.isArray(remoteFiles) && remoteFiles.length > 0 ? remoteFiles : cached
+
+          if (Array.isArray(filesSource) && filesSource.length > 0) {
+            filesSource.forEach((rf: any) => {
               const dsId = rf.datasetId || rf.fileId || rf.id
-              const localMatch = cachedMap.get(dsId)
-              collectedDatasets.push({
+              const fname = rf.fileName || rf.originalFileName || rf.name || 'ملف بيانات'
+              const localMatch = cachedMap.get(dsId) || cachedMap.get(fname)
+              const dedupKey = `${pid}::${fname}`
+
+              uniqueDatasetsMap.set(dedupKey, {
                 projectId: pid,
                 projectName: pname,
                 datasetId: dsId,
-                fileName: rf.fileName || rf.name || 'ملف بيانات',
+                fileName: fname,
                 rowCount: rf.rowCount ?? localMatch?.rowCount ?? 0,
                 columnCount: rf.columnCount ?? localMatch?.columnCount ?? 0,
-                uploadedAt: rf.uploadedAt,
+                uploadedAt: rf.uploadedAt || localMatch?.uploadedAt,
                 insights: localMatch?.insights || [],
-              })
-            })
-          } else if (Array.isArray(cached) && cached.length > 0) {
-            cached.forEach((ds: any) => {
-              collectedDatasets.push({
-                projectId: pid,
-                projectName: pname,
-                datasetId: ds.id,
-                fileName: ds.name,
-                rowCount: ds.rowCount ?? 0,
-                columnCount: ds.columnCount ?? 0,
-                uploadedAt: ds.uploadedAt,
-                insights: ds.insights || [],
               })
             })
           } else {
@@ -170,6 +208,7 @@ export function RightSidebar() {
           }
         }
 
+        const collectedDatasets = Array.from(uniqueDatasetsMap.values())
         setEmptyProjectsCount(emptyProjs)
         setDatasets(collectedDatasets)
         collectedReports.sort(
@@ -180,7 +219,7 @@ export function RightSidebar() {
         const totalRows = collectedDatasets.reduce((sum, d) => sum + d.rowCount, 0)
         const introText =
           collectedDatasets.length > 0
-            ? `أهلاً بك! أتابع معك قسم "${activeWorkspace?.name || 'القسم النشط'}" (${projList.length} مشاريع، ${collectedDatasets.length} ملفات، ${totalRows.toLocaleString()} سجل). اسألني عن تحليل بياناتك أو أي معلومة من السوق والإنترنت.`
+            ? `أهلاً بك! أتابع معك قسم "${activeWorkspace?.name || 'القسم النشط'}" (${projList.length} مشاريع، ${collectedDatasets.length} ملفات فريدة، ${totalRows.toLocaleString()} سجل). اسألني عن تحليل بياناتك أو أي استفسار استراتيجي.`
             : `أهلاً بك! قسم "${activeWorkspace?.name || 'الحالي'}" جاهز. اسألني أي سؤال تحليلي أو ارفع ملف بيانات وسأساعدك فوراً.`
 
         setMessages([{ id: 'welcome', sender: 'ai', text: introText }])
@@ -274,15 +313,21 @@ export function RightSidebar() {
       const workspaceContext = {
         workspaceName: activeWorkspace?.name || 'القسم النشط',
         projectsCount: projects.length,
+        emptyProjectsCount,
         membersCount,
-        projects: projects.map((p) => p.name),
-        files: datasets.map((d) => ({
-          fileName: d.fileName,
-          projectName: d.projectName,
-          rowCount: d.rowCount,
-          columnCount: d.columnCount,
-          extractedInsights: d.insights,
-        })),
+        projects: projects.map((p) => {
+          const pFiles = datasets.filter((d) => d.projectId === p.id)
+          return {
+            projectName: p.name,
+            filesCount: pFiles.length,
+            files: pFiles.map((f) => ({
+              fileName: f.fileName,
+              rows: f.rowCount,
+              columns: f.columnCount,
+              keyInsights: f.insights.slice(0, 4).map((i) => `${i.title}: ${i.description}`),
+            })),
+          }
+        }),
       }
 
       const res = await fetch('/api/copilot/chat', {
@@ -353,17 +398,17 @@ export function RightSidebar() {
         </div>
 
         <div className="space-y-3 p-4">
-          <div className="max-h-72 space-y-2.5 overflow-y-auto pe-1">
+          <div className="max-h-80 space-y-2.5 overflow-y-auto pe-1">
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                className={`whitespace-pre-line rounded-xl p-3 text-xs leading-relaxed ${
+                className={`rounded-xl p-3 text-xs leading-relaxed ${
                   msg.sender === 'ai'
                     ? 'rounded-ss-sm bg-secondary text-foreground'
                     : 'rounded-ee-sm border border-primary/30 bg-primary/20 text-foreground'
                 }`}
               >
-                <p>{msg.text}</p>
+                <FormattedChatText text={msg.text} />
 
                 {msg.sources && msg.sources.length > 0 && (
                   <div className="mt-2.5 border-t border-border/60 pt-2">
