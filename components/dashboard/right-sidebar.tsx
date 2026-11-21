@@ -24,7 +24,8 @@ type WorkspaceDatasetSummary = {
   rowCount: number
   columnCount: number
   uploadedAt?: string
-  insights: Array<{ title: string; description: string }>
+  columns: Array<{ name: string; dataType?: string }>
+  sampleRows: Array<Record<string, any>>
 }
 
 type WorkspaceProjectSummary = {
@@ -47,7 +48,6 @@ type ChatMessage = {
   sources?: Array<{ title: string; url: string }>
 }
 
-// دالة لتنسيق النص وعرض العناوين والنصوص الغامقة بشكل نظيف بدون رموز Markdown خام
 function FormattedChatText({ text }: { text: string }) {
   const lines = text.split('\n')
   return (
@@ -56,7 +56,6 @@ function FormattedChatText({ text }: { text: string }) {
         const trimmed = line.trim()
         if (!trimmed) return <div key={idx} className="h-1" />
 
-        // عنوان يبدأ بـ # أو ## أو ###
         const headingMatch = trimmed.match(/^#{1,4}\s+(.*)$/)
         if (headingMatch) {
           return (
@@ -66,7 +65,6 @@ function FormattedChatText({ text }: { text: string }) {
           )
         }
 
-        // تقسيم النصوص الغامقة **text**
         const parts = trimmed.split(/(\*\*[^*]+\*\*)/g)
         return (
           <p key={idx} className="text-xs leading-relaxed">
@@ -171,23 +169,56 @@ export function RightSidebar() {
             Array.isArray(remoteFiles) && remoteFiles.length > 0 ? remoteFiles : cached
 
           if (Array.isArray(filesSource) && filesSource.length > 0) {
-            filesSource.forEach((rf: any) => {
+            for (const rf of filesSource) {
               const dsId = rf.datasetId || rf.fileId || rf.id
               const fname = rf.fileName || rf.originalFileName || rf.name || 'ملف بيانات'
               const localMatch = cachedMap.get(dsId) || cachedMap.get(fname)
               const dedupKey = `${pid}::${fname}`
+
+              // جلب الأعمدة وعينة حقيقية من صفوف الملف من السيرفر ليتمكن الذكاء الاصطناعي من قراءتها
+              let cols: Array<{ name: string; dataType?: string }> = []
+              let sampleRows: Array<Record<string, any>> = []
+
+              if (dsId) {
+                const [schemaRes, queryRes] = await Promise.all([
+                  apiRequest<any>(`/api/analytics/datasets/${dsId}/schema`).catch(() => null),
+                  apiRequest<any>(`/api/analytics/datasets/${dsId}/query`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      metrics: [],
+                      groupBy: [],
+                      filters: [],
+                      limit: 40,
+                    }),
+                  }).catch(() => null),
+                ])
+
+                const rawCols = schemaRes?.columns || schemaRes?.Columns || []
+                if (Array.isArray(rawCols)) {
+                  cols = rawCols.map((c: any) => ({
+                    name: c.name || c.columnName || String(c),
+                    dataType: c.dataType || c.type,
+                  }))
+                }
+
+                const rawRows = queryRes?.rows || queryRes?.Rows || queryRes?.data || []
+                if (Array.isArray(rawRows)) {
+                  sampleRows = rawRows.slice(0, 40)
+                }
+              }
 
               uniqueDatasetsMap.set(dedupKey, {
                 projectId: pid,
                 projectName: pname,
                 datasetId: dsId,
                 fileName: fname,
-                rowCount: rf.rowCount ?? localMatch?.rowCount ?? 0,
-                columnCount: rf.columnCount ?? localMatch?.columnCount ?? 0,
+                rowCount: rf.rowCount ?? localMatch?.rowCount ?? sampleRows.length,
+                columnCount: rf.columnCount ?? localMatch?.columnCount ?? cols.length,
                 uploadedAt: rf.uploadedAt || localMatch?.uploadedAt,
-                insights: localMatch?.insights || [],
+                columns: cols,
+                sampleRows,
               })
-            })
+            }
           } else {
             emptyProjs++
           }
@@ -219,7 +250,7 @@ export function RightSidebar() {
         const totalRows = collectedDatasets.reduce((sum, d) => sum + d.rowCount, 0)
         const introText =
           collectedDatasets.length > 0
-            ? `أهلاً بك! أتابع معك قسم "${activeWorkspace?.name || 'القسم النشط'}" (${projList.length} مشاريع، ${collectedDatasets.length} ملفات فريدة، ${totalRows.toLocaleString()} سجل). اسألني عن تحليل بياناتك أو أي استفسار استراتيجي.`
+            ? `أهلاً بك! قرأت ملفات قسم "${activeWorkspace?.name || 'القسم النشط'}" (${collectedDatasets.length} ملفات، ${totalRows.toLocaleString()} سجل). اسألني عن أي تفاصيل أو أرقام داخل الجداول وسأحللها لك مباشرة.`
             : `أهلاً بك! قسم "${activeWorkspace?.name || 'الحالي'}" جاهز. اسألني أي سؤال تحليلي أو ارفع ملف بيانات وسأساعدك فوراً.`
 
         setMessages([{ id: 'welcome', sender: 'ai', text: introText }])
@@ -240,8 +271,8 @@ export function RightSidebar() {
     const latestFile = datasets[datasets.length - 1]
     return [
       `ماذا نستنتج من ملف ${latestFile.fileName}؟`,
-      'اقترح خطة عمل لتحسين أداء مشاريع القسم',
-      'أحدث اتجاهات تحليل البيانات في 2026',
+      'ما هي أبرز الأنماط والملاحظات في الأرقام؟',
+      'اقترح قرارات عملية بناءً على هذه البيانات',
     ]
   }, [datasets])
 
@@ -310,24 +341,17 @@ export function RightSidebar() {
     setIsThinking(true)
 
     try {
+      // إرسال البيانات الحقيقية (الأعمدة والصفوف) للذكاء الاصطناعي ليقرأها ويحللها مباشرة
       const workspaceContext = {
         workspaceName: activeWorkspace?.name || 'القسم النشط',
-        projectsCount: projects.length,
-        emptyProjectsCount,
-        membersCount,
-        projects: projects.map((p) => {
-          const pFiles = datasets.filter((d) => d.projectId === p.id)
-          return {
-            projectName: p.name,
-            filesCount: pFiles.length,
-            files: pFiles.map((f) => ({
-              fileName: f.fileName,
-              rows: f.rowCount,
-              columns: f.columnCount,
-              keyInsights: f.insights.slice(0, 4).map((i) => `${i.title}: ${i.description}`),
-            })),
-          }
-        }),
+        datasets: datasets.map((d) => ({
+          fileName: d.fileName,
+          projectName: d.projectName,
+          totalRows: d.rowCount,
+          totalColumns: d.columnCount,
+          columns: d.columns,
+          actualDataRows: d.sampleRows,
+        })),
       }
 
       const res = await fetch('/api/copilot/chat', {
@@ -382,7 +406,7 @@ export function RightSidebar() {
               <p className="text-sm font-semibold">{t.aiAssistant || 'المساعد الذكي'}</p>
               <p className="flex items-center gap-1 text-xs text-muted-foreground">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{' '}
-                {dataLoading ? 'جاري المزامنة...' : 'متصل • مدعوم بالبحث الحي'}
+                {dataLoading ? 'جاري قراءة الملفات...' : 'متصل • يحلل بياناتك مباشرة'}
               </p>
             </div>
           </div>
@@ -435,7 +459,7 @@ export function RightSidebar() {
             {isThinking && (
               <div className="flex items-center gap-2 rounded-xl bg-secondary p-3 text-xs text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                جاري التحليل والبحث في المصادر...
+                جاري قراءة الجدول واستخراج الاستنتاجات...
               </div>
             )}
           </div>
@@ -464,7 +488,7 @@ export function RightSidebar() {
             <input
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              placeholder={t.askAnythingData || 'اسأل عن بياناتك أو ابحث في الإنترنت...'}
+              placeholder={t.askAnythingData || 'اسأل عن أي عمود أو رقم في ملفاتك...'}
               className="h-10 w-full rounded-xl border border-border bg-background/60 ps-3.5 pe-10 text-xs placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
             <button
