@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
 import { apiRequest, getSession } from '@/lib/api'
 import { useWorkspaceRole } from '@/lib/useWorkspaceRole'
+import { useTranslation } from '@/lib/i18n'
 import {
   FolderKanban,
   FileSpreadsheet,
@@ -47,13 +48,6 @@ type WorkspaceMemberItem = {
   role: string
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  Owner: 'مالك المساحة',
-  Admin: 'مدير النظام',
-  Analyst: 'محلل بيانات',
-  Viewer: 'مشاهد فقط',
-}
-
 export default function DashboardPage() {
   const {
     activeWorkspaceId,
@@ -63,6 +57,14 @@ export default function DashboardPage() {
     canManageTeam,
     loading: roleLoading,
   } = useWorkspaceRole()
+  const { t, lang } = useTranslation()
+
+  const roleLabels: Record<string, string> = {
+    Owner: t.roleOwner,
+    Admin: t.roleAdmin,
+    Analyst: t.roleAnalyst,
+    Viewer: t.roleViewer,
+  }
 
   const [projects, setProjects] = useState<WorkspaceProject[]>([])
   const [datasets, setDatasets] = useState<WorkspaceDataset[]>([])
@@ -70,7 +72,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
 
   const session = getSession()
-  const displayName = session?.fullName || (session as any)?.name || 'مرحباً بك'
+  const displayName = session?.fullName || (session as any)?.name || 'User'
 
   useEffect(() => {
     if (roleLoading) return
@@ -93,7 +95,6 @@ export default function DashboardPage() {
           return
         }
 
-        // 1. جلب مشاريع المساحة وأعضائها بالتوازي
         const [rawProjects, rawMembers] = await Promise.all([
           apiRequest<any[]>(`/api/workspaces/${wsId}/projects`).catch(() => []),
           apiRequest<any[]>(`/api/workspaces/${wsId}/members`).catch(() => []),
@@ -102,7 +103,7 @@ export default function DashboardPage() {
         const mappedProjects: WorkspaceProject[] = Array.isArray(rawProjects)
           ? rawProjects.map((p: any) => ({
               id: p.id || p.projectId,
-              name: p.name || 'مشروع بدون عنوان',
+              name: p.name || 'Untitled Project',
               description: p.description,
               createdAt: p.createdAt,
             }))
@@ -112,14 +113,13 @@ export default function DashboardPage() {
         const mappedMembers: WorkspaceMemberItem[] = Array.isArray(rawMembers)
           ? rawMembers.map((m: any) => ({
               id: m.userId || m.id || m.email,
-              name: m.fullName || m.userName || m.email?.split('@')[0] || 'عضو',
+              name: m.fullName || m.userName || m.email?.split('@')[0] || 'Member',
               email: m.email || '',
               role: m.role || 'Viewer',
             }))
           : []
         setMembers(mappedMembers)
 
-        // 2. تجميع ملفات البيانات والرؤى المرتبطة بمشاريع هذا القسم
         const collectedDatasets: WorkspaceDataset[] = []
         for (const proj of mappedProjects) {
           const storageKey = `insightflow_project_files_${proj.id}`
@@ -129,7 +129,7 @@ export default function DashboardPage() {
               let rows = ds.rowCount ?? 0
               if (rows === 0 && Array.isArray(ds.insights)) {
                 for (const ins of ds.insights) {
-                  const m = ins.description?.match(/\((\d+)\s*صف\)/)
+                  const m = ins.description?.match(/\((\d+)\s*(?:صف|rows|Zeilen)\)/)
                   if (m?.[1]) {
                     rows = Number(m[1])
                     break
@@ -157,7 +157,7 @@ export default function DashboardPage() {
                   projectId: proj.id,
                   projectName: proj.name,
                   datasetId: rf.datasetId || rf.id,
-                  fileName: rf.fileName || rf.originalFileName || rf.name || 'ملف بيانات',
+                  fileName: rf.fileName || rf.originalFileName || rf.name || 'Dataset',
                   rowCount: rf.rowCount ?? 0,
                   columnCount: rf.columnCount ?? 0,
                   uploadedAt: rf.uploadedAt || rf.createdAt || new Date().toISOString(),
@@ -205,7 +205,7 @@ export default function DashboardPage() {
   }, [datasets])
 
   return (
-    <DashboardShell activeItem="Overview">
+    <DashboardShell activeItem="overview">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
         {/* Welcome & Active Department Banner */}
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-gradient-to-l from-primary/10 via-card/70 to-card/40 p-6">
@@ -213,18 +213,20 @@ export default function DashboardPage() {
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/15 px-3 py-1 text-xs font-semibold text-primary">
                 <Building2 className="h-3.5 w-3.5" />
-                {activeWorkspace?.name || 'مساحة العمل الرئيسية'}
+                {activeWorkspace?.name || t.proWorkspace}
               </span>
               {role && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background/60 px-2.5 py-1 text-xs font-medium text-muted-foreground">
                   <Shield className="h-3 w-3 text-primary" />
-                  صلاحيتك: {ROLE_LABELS[role] || role}
+                  {t.yourRole}: {roleLabels[role] || role}
                 </span>
               )}
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">أهلاً بك، {displayName}</h1>
+            <h1 className="text-2xl font-bold tracking-tight">
+              {t.welcomeUserPrefix} {displayName}
+            </h1>
             <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
-              نظرة عامة شاملة على مشاريع وبيانات وفريق عمل القسم المختار حالياً.
+              {t.dashOverviewDesc}
             </p>
           </div>
 
@@ -235,7 +237,7 @@ export default function DashboardPage() {
                 className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90"
               >
                 <Upload className="h-4 w-4" />
-                رفع ملف بيانات
+                {t.uploadDataFile}
               </Link>
             )}
             <Link
@@ -243,7 +245,7 @@ export default function DashboardPage() {
               className="inline-flex items-center gap-2 rounded-xl border border-border bg-secondary px-4 py-2.5 text-xs font-semibold hover:bg-secondary/80"
             >
               <BarChart3 className="h-4 w-4 text-primary" />
-              مركز التحليلات
+              {t.analyticsCenter}
             </Link>
           </div>
         </div>
@@ -252,80 +254,77 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-2xl border border-border bg-card/50 p-5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">مشاريع القسم</span>
+              <span className="text-xs font-medium text-muted-foreground">{t.deptProjects}</span>
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
                 <FolderKanban className="h-4 w-4" />
               </span>
             </div>
             <p className="mt-3 text-2xl font-bold">{loading ? '...' : projects.length}</p>
-            <p className="mt-1 text-xs text-muted-foreground">معزولة داخل هذا القسم</p>
+            <p className="mt-1 text-xs text-muted-foreground">{t.isolatedInDept}</p>
           </div>
 
           <div className="rounded-2xl border border-border bg-card/50 p-5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">مصادر البيانات</span>
+              <span className="text-xs font-medium text-muted-foreground">{t.dataSources}</span>
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-400">
                 <FileSpreadsheet className="h-4 w-4" />
               </span>
             </div>
             <p className="mt-3 text-2xl font-bold">{loading ? '...' : datasets.length}</p>
-            <p className="mt-1 text-xs text-muted-foreground">ملفات Excel و CSV مرفوعة</p>
+            <p className="mt-1 text-xs text-muted-foreground">{t.excelCsvUploaded}</p>
           </div>
 
           <div className="rounded-2xl border border-border bg-card/50 p-5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">السجلات المحللة</span>
+              <span className="text-xs font-medium text-muted-foreground">{t.analyzedRecords}</span>
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400">
                 <Layers className="h-4 w-4" />
               </span>
             </div>
             <p className="mt-3 text-2xl font-bold">
-              {loading ? '...' : totalRecords.toLocaleString()}
+              {loading ? '...' : totalRecords.toLocaleString(lang)}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">إجمالي الصفوف المعالجة</p>
+            <p className="mt-1 text-xs text-muted-foreground">{t.totalProcessedRows}</p>
           </div>
 
           <div className="rounded-2xl border border-border bg-card/50 p-5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">أعضاء الفريق</span>
+              <span className="text-xs font-medium text-muted-foreground">{t.teamMembersCard}</span>
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400">
                 <Users className="h-4 w-4" />
               </span>
             </div>
             <p className="mt-3 text-2xl font-bold">{loading ? '...' : members.length || 1}</p>
-            <p className="mt-1 text-xs text-muted-foreground">صلاحيات مخصصة للقسم</p>
+            <p className="mt-1 text-xs text-muted-foreground">{t.customDeptPermissions}</p>
           </div>
         </div>
 
         {/* Recent Projects & Team Members */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          {/* Recent Projects (7 cols) */}
           <div className="rounded-2xl border border-border bg-card/50 p-6 lg:col-span-7">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Database className="h-5 w-5 text-primary" />
-                <h2 className="text-base font-bold">أحدث المشاريع في القسم</h2>
+                <h2 className="text-base font-bold">{t.recentDeptProjects}</h2>
               </div>
               <Link
                 href="/projects"
                 className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
               >
-                عرض الكل
+                {t.viewAll}
                 <ArrowUpRight className="h-3.5 w-3.5" />
               </Link>
             </div>
 
             {loading ? (
               <p className="py-8 text-center text-xs text-muted-foreground animate-pulse">
-                جاري تحميل مشاريع القسم...
+                {t.loadingDeptProjects}
               </p>
             ) : projects.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border bg-background/40 p-8 text-center">
-                <p className="text-sm font-medium">لا توجد مشاريع في هذا القسم بعد</p>
+                <p className="text-sm font-medium">{t.noProjectsInDept}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {canAnalyzeAndUpload
-                    ? 'ابدأ بإنشاء مشروع ورفع ملف بيانات لتحليله فوراً.'
-                    : 'لم يقم الفريق بإضافة مشاريع في هذا القسم حتى الآن.'}
+                  {canAnalyzeAndUpload ? t.startCreateProjectDesc : t.noProjectsViewerDesc}
                 </p>
                 {canAnalyzeAndUpload && (
                   <Link
@@ -333,7 +332,7 @@ export default function DashboardPage() {
                     className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
                   >
                     <Upload className="h-3.5 w-3.5" />
-                    إنشاء مشروع ورفع ملف
+                    {t.createProjectUploadBtn}
                   </Link>
                 )}
               </div>
@@ -349,15 +348,15 @@ export default function DashboardPage() {
                       <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
                         <Clock className="h-3 w-3" />
                         {proj.createdAt
-                          ? new Date(proj.createdAt).toLocaleDateString('ar-EG')
-                          : 'نشط الآن'}
+                          ? new Date(proj.createdAt).toLocaleDateString(lang)
+                          : t.activeNow}
                       </p>
                     </div>
                     <Link
                       href={`/projects/${proj.id}`}
                       className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-primary/15 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/25"
                     >
-                      الداشبورد
+                      {t.openDashboard}
                       <ArrowUpRight className="h-3.5 w-3.5" />
                     </Link>
                   </div>
@@ -366,19 +365,18 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Workspace Team Summary (5 cols) */}
           <div className="flex flex-col justify-between rounded-2xl border border-border bg-card/50 p-6 lg:col-span-5">
             <div>
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Users className="h-5 w-5 text-primary" />
-                  <h2 className="text-base font-bold">فريق عمل القسم</h2>
+                  <h2 className="text-base font-bold">{t.deptTeamTitle}</h2>
                 </div>
                 <Link
                   href="/team"
                   className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
                 >
-                  إدارة الفريق
+                  {t.manageTeamBtn}
                   <ArrowUpRight className="h-3.5 w-3.5" />
                 </Link>
               </div>
@@ -394,13 +392,13 @@ export default function DashboardPage() {
                       <p className="truncate text-[11px] text-muted-foreground">{m.email}</p>
                     </div>
                     <span className="shrink-0 rounded-full border border-border bg-secondary px-2.5 py-0.5 text-[10px] font-semibold text-primary">
-                      {ROLE_LABELS[m.role] || m.role}
+                      {roleLabels[m.role] || m.role}
                     </span>
                   </div>
                 ))}
                 {!loading && members.length === 0 && (
                   <p className="py-4 text-center text-xs text-muted-foreground">
-                    أنت العضو النشط حالياً في هذه المساحة.
+                    {t.activeMemberOnly}
                   </p>
                 )}
               </div>
@@ -412,7 +410,7 @@ export default function DashboardPage() {
                 className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 py-2.5 text-xs font-semibold text-primary hover:bg-primary/20"
               >
                 <UserPlus className="h-4 w-4" />
-                دعوة أعضاء جدد للقسم
+                {t.inviteMembersBtn}
               </Link>
             )}
           </div>
@@ -423,13 +421,13 @@ export default function DashboardPage() {
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-amber-400" />
-              <h2 className="text-base font-bold">أحدث رؤى الذكاء الاصطناعي في هذا القسم</h2>
+              <h2 className="text-base font-bold">{t.latestDeptAiInsights}</h2>
             </div>
             <Link
               href="/analytics"
               className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
             >
-              التحليلات المتقدمة
+              {t.advancedAnalyticsBtn}
               <ArrowUpRight className="h-3.5 w-3.5" />
             </Link>
           </div>
@@ -457,9 +455,7 @@ export default function DashboardPage() {
           ) : (
             <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/40 p-4 text-xs text-muted-foreground">
               <Activity className="h-4 w-4 shrink-0 text-primary" />
-              <span>
-                ستظهر هنا أهم المؤشرات والأنماط التي يكتشفها محرك الذكاء الاصطناعي تلقائياً عند رفع وتحليل الملفات في هذا القسم.
-              </span>
+              <span>{t.emptyInsightsBanner}</span>
             </div>
           )}
         </div>
