@@ -16,6 +16,52 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'الرسالة مطلوبة.' }, { status: 400 })
     }
 
+    // 1. جلب الموديلات المتاحة فعلياً في حساب Groq الخاص بك
+    let availableIds: string[] = []
+    try {
+      const modelsRes = await fetch('https://api.groq.com/openai/v1/models', {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      })
+      if (modelsRes.ok) {
+        const modelsData = await modelsRes.json()
+        availableIds = (modelsData?.data || [])
+          .map((m: any) => m.id)
+          .filter(
+            (id: string) =>
+              id &&
+              !id.includes('whisper') &&
+              !id.includes('guard') &&
+              !id.includes('tts') &&
+              !id.includes('orpheus') &&
+              !id.includes('safeguard')
+          )
+      }
+    } catch {
+      // تجاهل خطأ جلب القائمة واستخدام القائمة الافتراضية
+    }
+
+    // ترتيب الموديلات المفضلة (البحث الحي أولاً ثم أقوى نماذج المحادثة المتاحة)
+    const preferredOrder = [
+      'groq/compound',
+      'groq/compound-mini',
+      'compound-beta',
+      'compound-beta-mini',
+      'openai/gpt-oss-120b',
+      'qwen/qwen3-32b',
+      'llama-3.1-8b-instant',
+      'gemma2-9b-it',
+    ]
+
+    const prioritizedModels = [
+      ...preferredOrder.filter((id) => availableIds.includes(id)),
+      ...availableIds.filter((id) => !preferredOrder.includes(id)),
+    ]
+
+    const modelsToTry =
+      prioritizedModels.length > 0
+        ? prioritizedModels.slice(0, 5)
+        : ['groq/compound', 'groq/compound-mini', 'llama-3.1-8b-instant']
+
     const systemPrompt = `أنت المساعد الذكي لمنصة InsightFlow لتحليل البيانات والأعمال.
 تتصرف كمحلل بيانات وخبير استراتيجي محترف بأسلوب محادثة طبيعي وواضح (مثل ChatGPT)، وتجنب تماماً تكرار نصوص التقارير الجامدة.
 - إذا سألك المستخدم عن بياناته أو مشاريعه أو ملفاته، اعتمد على "سياق القسم النشط" المرفق بدقة.
@@ -37,8 +83,6 @@ ${JSON.stringify(workspaceContext || {}, null, 2)}`
       { role: 'user', content: message },
     ]
 
-    // compound يدعم البحث الحي في الإنترنت، و llama-3.3-70b-versatile كاحتياطي فائق السرعة
-    const modelsToTry = ['groq/compound', 'llama-3.3-70b-versatile']
     let data: any = null
     let okResponse = false
     let lastStatus = 500
