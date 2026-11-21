@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
+import { getSession } from '@/lib/api'
+import { useWorkspaceRole } from '@/lib/useWorkspaceRole'
 import {
   LifeBuoy,
   UploadCloud,
@@ -14,7 +16,12 @@ import {
   CheckCircle2,
   Activity,
   ArrowUpRight,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react'
+
+const WEB3FORMS_ACCESS_KEY =
+  process.env.NEXT_PUBLIC_WEB3FORMS_KEY || 'bc7f0489-a0ab-43fe-b918-12f3e1580066'
 
 const FAQS = [
   {
@@ -35,19 +42,72 @@ const FAQS = [
   },
 ]
 
+const CATEGORY_LABELS: Record<string, string> = {
+  technical: 'مشكلة تقنية في رفع أو تحليل الملفات',
+  account: 'إدارة الحساب والصلاحيات',
+  feature: 'اقتراح ميزة جديدة',
+}
+
 export default function SupportPage() {
+  const { activeWorkspace } = useWorkspaceRole()
   const [openFaq, setOpenFaq] = useState<number | null>(0)
   const [subject, setSubject] = useState('')
   const [category, setCategory] = useState('technical')
   const [message, setMessage] = useState('')
+  const [sending, setSending] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [ticketId, setTicketId] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
 
-  function handleTicketSubmit(e: React.FormEvent) {
+  async function handleTicketSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!subject.trim() || !message.trim()) return
-    setSubmitted(true)
-    setSubject('')
-    setMessage('')
+    if (!subject.trim() || !message.trim() || sending) return
+
+    setSending(true)
+    setErrorMsg('')
+
+    try {
+      const session = getSession()
+      const senderName = session?.fullName || (session as any)?.name || 'مستخدم InsightFlow'
+      const senderEmail = session?.email || 'no-reply@insightflow.app'
+      const generatedTicket = `SUP-${Math.floor(1000 + Math.random() * 9000)}`
+
+      const response = await fetch('https://api.web3forms.com/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          access_key: WEB3FORMS_ACCESS_KEY,
+          subject: `[InsightFlow Support #${generatedTicket}] ${subject.trim()}`,
+          from_name: senderName,
+          email: senderEmail,
+          'رقم التذكرة': generatedTicket,
+          'اسم المرسل': senderName,
+          'البريد الإلكتروني': senderEmail,
+          'مساحة العمل': activeWorkspace?.name || 'غير محدد',
+          'نوع الطلب': CATEGORY_LABELS[category] || category,
+          'عنوان الموضوع': subject.trim(),
+          'تفاصيل الرسالة': message.trim(),
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'فشل إرسال الرسالة، حاول مرة أخرى.')
+      }
+
+      setTicketId(generatedTicket)
+      setSubmitted(true)
+      setSubject('')
+      setMessage('')
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'حدث خطأ أثناء إرسال الرسالة.')
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -160,15 +220,18 @@ export default function SupportPage() {
           <div className="rounded-2xl border border-border bg-card/50 p-6 lg:col-span-5">
             <h2 className="mb-1 text-base font-bold">تواصل مع فريق الدعم</h2>
             <p className="mb-4 text-xs text-muted-foreground">
-              واجهت مشكلة تقنية أو لديك اقتراح لميزة جديدة؟ أرسل رسالتك وسنرد عليك قريباً.
+              واجهت مشكلة تقنية أو لديك اقتراح لميزة جديدة؟ أرسل رسالتك وستصلنا فوراً.
             </p>
 
             {submitted ? (
               <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-5 text-center">
                 <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-emerald-400" />
-                <p className="text-sm font-bold text-foreground">تم استلام رسالتك بنجاح</p>
+                <p className="text-sm font-bold text-foreground">تم إرسال رسالتك بنجاح</p>
+                <p className="mt-1 text-xs font-semibold text-primary">
+                  رقم التذكرة المرجعي: #{ticketId}
+                </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  سيقوم فريق الدعم الفني بمراجعة طلبك والرد على بريدك الإلكتروني.
+                  وصلت رسالتك إلى فريق الدعم الفني، وسنقوم بالرد على بريدك الإلكتروني في أقرب وقت.
                 </p>
                 <button
                   type="button"
@@ -180,16 +243,30 @@ export default function SupportPage() {
               </div>
             ) : (
               <form onSubmit={handleTicketSubmit} className="space-y-3">
+                {errorMsg && (
+                  <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-400">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{errorMsg}</span>
+                  </div>
+                )}
+
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">نوع الطلب</label>
                   <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    className="h-10 w-full rounded-xl border border-input bg-background/60 px-3 text-xs outline-none focus:border-primary"
+                    disabled={sending}
+                    className="h-10 w-full rounded-xl border border-input bg-background/60 px-3 text-xs outline-none focus:border-primary disabled:opacity-50"
                   >
-                    <option value="technical" className="bg-slate-900">مشكلة تقنية في رفع أو تحليل الملفات</option>
-                    <option value="account" className="bg-slate-900">إدارة الحساب والصلاحيات</option>
-                    <option value="feature" className="bg-slate-900">اقتراح ميزة جديدة</option>
+                    <option value="technical" className="bg-slate-900">
+                      مشكلة تقنية في رفع أو تحليل الملفات
+                    </option>
+                    <option value="account" className="bg-slate-900">
+                      إدارة الحساب والصلاحيات
+                    </option>
+                    <option value="feature" className="bg-slate-900">
+                      اقتراح ميزة جديدة
+                    </option>
                   </select>
                 </div>
 
@@ -198,10 +275,11 @@ export default function SupportPage() {
                   <input
                     type="text"
                     required
+                    disabled={sending}
                     value={subject}
                     onChange={(e) => setSubject(e.target.value)}
                     placeholder="ملخص قصير للمشكلة أو الاستفسار..."
-                    className="h-10 w-full rounded-xl border border-input bg-background/60 px-3 text-xs outline-none focus:border-primary"
+                    className="h-10 w-full rounded-xl border border-input bg-background/60 px-3 text-xs outline-none focus:border-primary disabled:opacity-50"
                   />
                 </div>
 
@@ -210,19 +288,30 @@ export default function SupportPage() {
                   <textarea
                     rows={4}
                     required
+                    disabled={sending}
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     placeholder="اشرح التفاصيل لمساعدتك بأسرع وقت..."
-                    className="w-full rounded-xl border border-input bg-background/60 p-3 text-xs outline-none focus:border-primary"
+                    className="w-full rounded-xl border border-input bg-background/60 p-3 text-xs outline-none focus:border-primary disabled:opacity-50"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                  disabled={sending}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
                 >
-                  <Send className="h-3.5 w-3.5" />
-                  إرسال إلى الدعم الفني
+                  {sending ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      جاري الإرسال...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-3.5 w-3.5" />
+                      إرسال إلى الدعم الفني
+                    </>
+                  )}
                 </button>
               </form>
             )}
