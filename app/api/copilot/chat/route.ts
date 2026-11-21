@@ -36,26 +36,44 @@ ${JSON.stringify(workspaceContext || {}, null, 2)}`
       { role: 'user', parts: [{ text: message }] },
     ]
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemInstruction }] },
-          contents,
-          tools: [{ google_search: {} }],
-        }),
+    const modelsToTry = ['gemini-3.8-flash', 'gemini-3.8-pro', 'gemini-3.0-flash']
+    let data: any = null
+    let okResponse = false
+    let lastStatus = 500
+
+    for (const modelName of modelsToTry) {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemInstruction }] },
+            contents,
+            tools: [{ google_search: {} }],
+          }),
+        }
+      )
+
+      data = await response.json()
+      lastStatus = response.status
+
+      if (response.ok) {
+        okResponse = true
+        break
       }
-    )
 
-    const data = await response.json()
+      // إذا كان الخطأ بسبب اسم الموديل فقط نجرب الموديل التالي، وإلا نوقف المحاولة
+      if (!data?.error?.message?.includes('no longer available') && response.status !== 404) {
+        break
+      }
+    }
 
-    if (!response.ok) {
+    if (!okResponse) {
       console.error('Gemini API Error:', data)
       return NextResponse.json(
         { error: data?.error?.message || 'حدث خطأ أثناء الاتصال بالمساعد الذكي.' },
-        { status: response.status }
+        { status: lastStatus }
       )
     }
 
