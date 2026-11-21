@@ -25,19 +25,6 @@ export function setStoredActiveWorkspaceId(workspaceId: string) {
   localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspaceId)
 }
 
-export function saveWorkspaceOverride(
-  workspaceId: string,
-  data: { name?: string; description?: string }
-) {
-  if (typeof window === 'undefined' || !workspaceId) return
-  const current = JSON.parse(localStorage.getItem(WORKSPACE_OVERRIDES_KEY) || '{}')
-  current[workspaceId] = {
-    ...(current[workspaceId] || {}),
-    ...data,
-  }
-  localStorage.setItem(WORKSPACE_OVERRIDES_KEY, JSON.stringify(current))
-}
-
 function getWorkspaceOverrides(): Record<string, { name?: string; description?: string }> {
   if (typeof window === 'undefined') return {}
   try {
@@ -45,6 +32,43 @@ function getWorkspaceOverrides(): Record<string, { name?: string; description?: 
   } catch {
     return {}
   }
+}
+
+export function saveWorkspaceOverride(
+  workspaceId: string,
+  data: { name?: string; description?: string }
+) {
+  if (typeof window === 'undefined' || !workspaceId) return
+
+  // 1. حفظ التعديل في قاموس التخصيصات
+  const current = getWorkspaceOverrides()
+  current[workspaceId] = {
+    ...(current[workspaceId] || {}),
+    ...data,
+  }
+  localStorage.setItem(WORKSPACE_OVERRIDES_KEY, JSON.stringify(current))
+
+  // 2. تحديث القائمة المخبأة مباشرة بنفس الاسم والوصف الجديدين
+  try {
+    const cachedRaw = JSON.parse(localStorage.getItem(WORKSPACE_LIST_CACHE_KEY) || '[]')
+    if (Array.isArray(cachedRaw) && cachedRaw.length > 0) {
+      const updatedCache = cachedRaw.map((w: any) =>
+        w.id === workspaceId
+          ? {
+              ...w,
+              name: data.name || w.name,
+              description: data.description !== undefined ? data.description : w.description,
+            }
+          : w
+      )
+      localStorage.setItem(WORKSPACE_LIST_CACHE_KEY, JSON.stringify(updatedCache))
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. إبلاغ جميع المكونات المفتوحة (Topbar / Settings / Team / Sidebar) فوراً
+  window.dispatchEvent(new Event('insightflow_workspace_updated'))
 }
 
 export function useWorkspaceRole() {
@@ -59,48 +83,40 @@ export function useWorkspaceRole() {
       const myEmail = session?.email?.toLowerCase()
       const overrides = getWorkspaceOverrides()
 
-      // قراءة النسخة المخبأة فوراً لتجنب ظهور "جاري التحميل..." أثناء انتظار السيرفر
+      const applyOverrides = (list: any[]): WorkspaceSummary[] =>
+        list.map((w: any) => {
+          const id = w.id || w.workspaceId
+          const ov = overrides[id] || {}
+          return {
+            id,
+            name: ov.name || w.name || 'مساحة عمل',
+            description: ov.description !== undefined ? ov.description : w.description,
+          }
+        })
+
+      // قراءة النسخة المخبأة فوراً لتجنب ظهور "جاري التحميل..."
       const cachedRaw = JSON.parse(localStorage.getItem(WORKSPACE_LIST_CACHE_KEY) || '[]')
       if (Array.isArray(cachedRaw) && cachedRaw.length > 0) {
-        const cachedMapped = cachedRaw.map((w: any) => ({
-          id: w.id,
-          name: overrides[w.id]?.name || w.name || 'مساحة عمل',
-          description: overrides[w.id]?.description !== undefined ? overrides[w.id].description : w.description,
-        }))
+        const cachedMapped = applyOverrides(cachedRaw)
         setWorkspaces(cachedMapped)
         const savedId = getStoredActiveWorkspaceId()
-        const preSelected = cachedMapped.find((w: any) => w.id === savedId) || cachedMapped[0]
+        const preSelected = cachedMapped.find((w) => w.id === savedId) || cachedMapped[0]
         if (preSelected) setActiveWorkspace(preSelected)
       }
 
       const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
-      let mappedList: WorkspaceSummary[] = Array.isArray(wsList)
-        ? wsList.map((w: any) => {
-            const id = w.id || w.workspaceId
-            const ov = overrides[id] || {}
-            return {
-              id,
-              name: ov.name || w.name || 'مساحة عمل',
-              description: ov.description !== undefined ? ov.description : w.description,
-            }
-          })
-        : []
+      let mappedList: WorkspaceSummary[] =
+        Array.isArray(wsList) && wsList.length > 0 ? applyOverrides(wsList) : []
 
-      // إذا فشل السيرفر مؤقتاً نستخدم القائمة المخبأة أو الجلسة
       if (mappedList.length === 0 && Array.isArray(cachedRaw) && cachedRaw.length > 0) {
-        mappedList = cachedRaw.map((w: any) => ({
-          id: w.id,
-          name: overrides[w.id]?.name || w.name || 'مساحة عمل',
-          description: overrides[w.id]?.description !== undefined ? overrides[w.id].description : w.description,
-        }))
+        mappedList = applyOverrides(cachedRaw)
       } else if (mappedList.length === 0 && session?.workspaceId) {
-        mappedList = [
+        mappedList = applyOverrides([
           {
             id: session.workspaceId,
-            name: overrides[session.workspaceId]?.name || 'مساحة العمل الرئيسية',
-            description: overrides[session.workspaceId]?.description,
+            name: 'مساحة العمل الرئيسية',
           },
-        ]
+        ])
       }
 
       if (mappedList.length > 0) {
@@ -141,6 +157,12 @@ export function useWorkspaceRole() {
 
   useEffect(() => {
     fetchWorkspaceAndRole()
+
+    const onWorkspaceUpdated = () => {
+      fetchWorkspaceAndRole()
+    }
+    window.addEventListener('insightflow_workspace_updated', onWorkspaceUpdated)
+    return () => window.removeEventListener('insightflow_workspace_updated', onWorkspaceUpdated)
   }, [fetchWorkspaceAndRole])
 
   function switchWorkspace(workspaceId: string) {
