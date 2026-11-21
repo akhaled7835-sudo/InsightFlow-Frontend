@@ -12,7 +12,7 @@ import {
   RotateCcw,
   Globe,
 } from 'lucide-react'
-import { useTranslation } from '@/lib/i18n'
+import { useTranslation, SUPPORTED_LANGUAGES } from '@/lib/i18n'
 import { apiRequest, getSession } from '@/lib/api'
 import { useWorkspaceRole } from '@/lib/useWorkspaceRole'
 
@@ -47,6 +47,279 @@ type ChatMessage = {
   sender: 'ai' | 'user'
   text: string
   sources?: Array<{ title: string; url: string }>
+}
+
+const SIDEBAR_LOCALES: Record<
+  string,
+  {
+    readingFiles: string
+    connectedLive: string
+    clearChat: string
+    thinking: string
+    sources: string
+    recentReports: string
+    all: string
+    noSavedReports: string
+    welcomeWithFiles: (ws: string, filesCount: number, rows: string) => string
+    welcomeEmpty: (ws: string) => string
+    sugNoData1: string
+    sugNoData2: string
+    sugFile: (file: string) => string
+    sugPatterns: string
+    sugActions: string
+    recEmptyTitle: (count: number) => string
+    recEmptyBody: string
+    recReportTitle: string
+    recReportBody: (count: number) => string
+    recAnalyticsTitle: string
+    recAnalyticsBody: string
+    recTeamTitle: string
+    recTeamBody: string
+    recProjectsTitle: string
+    recProjectsBody: string
+    chatError: string
+  }
+> = {
+  en: {
+    readingFiles: 'Reading workspace files...',
+    connectedLive: 'Online • Analyzing your data live',
+    clearChat: 'Clear chat',
+    thinking: 'Reading dataset and extracting insights...',
+    sources: 'Sources:',
+    recentReports: 'Recent Reports',
+    all: 'All',
+    noSavedReports: 'No saved reports in this workspace yet.',
+    welcomeWithFiles: (ws, c, r) =>
+      `Welcome! I've loaded "${ws}" (${c} files, ${r} records). Ask me about any metric or row in your tables and I'll analyze it directly.`,
+    welcomeEmpty: (ws) =>
+      `Welcome! "${ws}" is ready. Ask any analytical question or upload a dataset to get instant insights.`,
+    sugNoData1: 'Key KPIs for growing businesses',
+    sugNoData2: 'How to analyze sales data effectively?',
+    sugFile: (f) => `What can we conclude from ${f}?`,
+    sugPatterns: 'What are the key patterns and anomalies?',
+    sugActions: 'Suggest actionable decisions based on this data',
+    recEmptyTitle: (c) => `Upload data for ${c} empty projects`,
+    recEmptyBody: 'You have projects in this department without uploaded datasets yet.',
+    recReportTitle: 'Generate your first executive report',
+    recReportBody: (c) => `You have ${c} analyzed files ready to export as PDF or Excel.`,
+    recAnalyticsTitle: 'Explore Advanced Analytics',
+    recAnalyticsBody: 'Compare metrics and columns to uncover deeper insights.',
+    recTeamTitle: 'Invite your team',
+    recTeamBody: 'Share projects and reports with analysts and viewers.',
+    recProjectsTitle: 'Review Department Projects',
+    recProjectsBody: 'Explore all interactive charts across workspace projects.',
+    chatError: 'Sorry, could not get a response right now',
+  },
+  ar: {
+    readingFiles: 'جاري قراءة الملفات...',
+    connectedLive: 'متصل • يحلل بياناتك مباشرة',
+    clearChat: 'مسح المحادثة',
+    thinking: 'جاري قراءة الجدول واستخراج الاستنتاجات...',
+    sources: 'المصادر:',
+    recentReports: 'أحدث التقارير',
+    all: 'الكل',
+    noSavedReports: 'لا توجد تقارير محفوظة في هذا القسم بعد.',
+    welcomeWithFiles: (ws, c, r) =>
+      `أهلاً بك! قرأت ملفات قسم "${ws}" (${c} ملفات، ${r} سجل). اسألني عن أي تفاصيل أو أرقام داخل الجداول وسأحللها لك مباشرة.`,
+    welcomeEmpty: (ws) =>
+      `أهلاً بك! قسم "${ws}" جاهز. اسألني أي سؤال تحليلي أو ارفع ملف بيانات وسأساعدك فوراً.`,
+    sugNoData1: 'أهم مؤشرات الأداء KPIs للشركات',
+    sugNoData2: 'كيف أحلل بيانات المبيعات باحتراف؟',
+    sugFile: (f) => `ماذا نستنتج من ملف ${f}؟`,
+    sugPatterns: 'ما هي أبرز الأنماط والفروق في الأرقام؟',
+    sugActions: 'اقترح قرارات عملية بناءً على هذه البيانات',
+    recEmptyTitle: (c) => `ارفع بيانات لـ ${c} مشاريع فارغة`,
+    recEmptyBody: 'لديك مشاريع في هذا القسم لم تُرفع لها ملفات بيانات بعد.',
+    recReportTitle: 'أنشئ أول تقرير تنفيذي',
+    recReportBody: (c) => `لديك ${c} ملفات محللة جاهزة للتصدير كـ PDF أو Excel.`,
+    recAnalyticsTitle: 'استكشف التحليلات المتقدمة',
+    recAnalyticsBody: 'قارن بين المؤشرات والأعمدة واستخرج رؤى أعمق.',
+    recTeamTitle: 'ادعُ فريق العمل للقسم',
+    recTeamBody: 'شارك المشاريع والتقارير مع المحللين والمشاهدين.',
+    recProjectsTitle: 'مراجعة لوحة المشاريع',
+    recProjectsBody: 'استعرض جميع الرسوم البيانية التفاعلية لمشاريع القسم.',
+    chatError: 'عذراً، تعذر الحصول على إجابة حالياً',
+  },
+  de: {
+    readingFiles: 'Dateien werden gelesen...',
+    connectedLive: 'Online • Analysiert Ihre Daten live',
+    clearChat: 'Chat löschen',
+    thinking: 'Tabelle wird gelesen und Erkenntnisse werden extrahiert...',
+    sources: 'Quellen:',
+    recentReports: 'Neueste Berichte',
+    all: 'Alle',
+    noSavedReports: 'Noch keine gespeicherten Berichte in dieser Abteilung.',
+    welcomeWithFiles: (ws, c, r) =>
+      `Willkommen! Ich habe "${ws}" geladen (${c} Dateien, ${r} Datensätze). Fragen Sie mich nach beliebigen Zahlen oder Details in Ihren Tabellen.`,
+    welcomeEmpty: (ws) =>
+      `Willkommen! "${ws}" ist bereit. Stellen Sie eine Analysefrage oder laden Sie eine Datendatei hoch.`,
+    sugNoData1: 'Wichtigste KPIs für Unternehmen',
+    sugNoData2: 'Wie analysiert man Verkaufsdaten professionell?',
+    sugFile: (f) => `Was lässt sich aus ${f} schließen?`,
+    sugPatterns: 'Was sind die wichtigsten Muster und Abweichungen?',
+    sugActions: 'Schlagen Sie konkrete Entscheidungen auf Basis dieser Daten vor',
+    recEmptyTitle: (c) => `Daten für ${c} leere Projekte hochladen`,
+    recEmptyBody: 'In dieser Abteilung gibt es Projekte ohne hochgeladene Datendateien.',
+    recReportTitle: 'Ersten Managementbericht erstellen',
+    recReportBody: (c) => `Sie haben ${c} analysierte Dateien bereit für den PDF- oder Excel-Export.`,
+    recAnalyticsTitle: 'Erweiterte Analysen entdecken',
+    recAnalyticsBody: 'Vergleichen Sie Kennzahlen und Spalten für tiefere Einblicke.',
+    recTeamTitle: 'Team in die Abteilung einladen',
+    recTeamBody: 'Teilen Sie Projekte und Berichte mit Analysten und Betrachtern.',
+    recProjectsTitle: 'Projektübersicht prüfen',
+    recProjectsBody: 'Alle interaktiven Diagramme der Abteilungsprojekte ansehen.',
+    chatError: 'Entschuldigung, derzeit konnte keine Antwort abgerufen werden',
+  },
+  es: {
+    readingFiles: 'Leyendo archivos...',
+    connectedLive: 'En línea • Analizando tus datos en vivo',
+    clearChat: 'Limpiar chat',
+    thinking: 'Leyendo tabla y extrayendo conclusiones...',
+    sources: 'Fuentes:',
+    recentReports: 'Informes recientes',
+    all: 'Todos',
+    noSavedReports: 'Aún no hay informes guardados en este departamento.',
+    welcomeWithFiles: (ws, c, r) =>
+      `¡Bienvenido! He cargado "${ws}" (${c} archivos, ${r} registros). Pregúntame sobre cualquier cifra o detalle de tus tablas.`,
+    welcomeEmpty: (ws) =>
+      `¡Bienvenido! "${ws}" está listo. Haz cualquier pregunta analítica o sube un archivo de datos.`,
+    sugNoData1: 'KPIs clave para empresas',
+    sugNoData2: '¿Cómo analizar datos de ventas eficazmente?',
+    sugFile: (f) => `¿Qué podemos concluir de ${f}?`,
+    sugPatterns: '¿Cuáles son los patrones y diferencias principales?',
+    sugActions: 'Sugiere decisiones prácticas basadas en estos datos',
+    recEmptyTitle: (c) => `Subir datos para ${c} proyectos vacíos`,
+    recEmptyBody: 'Tienes proyectos en este departamento sin archivos subidos aún.',
+    recReportTitle: 'Crea tu primer informe ejecutivo',
+    recReportBody: (c) => `Tienes ${c} archivos analizados listos para exportar a PDF o Excel.`,
+    recAnalyticsTitle: 'Explorar Analítica Avanzada',
+    recAnalyticsBody: 'Compara métricas y columnas para obtener ideas más profundas.',
+    recTeamTitle: 'Invita a tu equipo',
+    recTeamBody: 'Comparte proyectos e informes con analistas y lectores.',
+    recProjectsTitle: 'Revisar proyectos del departamento',
+    recProjectsBody: 'Explora todos los gráficos interactivos de los proyectos.',
+    chatError: 'Lo sentimos, no se pudo obtener una respuesta ahora',
+  },
+  it: {
+    readingFiles: 'Lettura file in corso...',
+    connectedLive: 'Online • Analisi dei dati in tempo reale',
+    clearChat: 'Cancella chat',
+    thinking: 'Lettura tabella ed estrazione conclusioni...',
+    sources: 'Fonti:',
+    recentReports: 'Report recenti',
+    all: 'Tutti',
+    noSavedReports: 'Nessun report salvato in questo reparto.',
+    welcomeWithFiles: (ws, c, r) =>
+      `Benvenuto! Ho caricato "${ws}" (${c} file, ${r} record). Chiedimi qualsiasi dettaglio o numero nelle tue tabelle.`,
+    welcomeEmpty: (ws) =>
+      `Benvenuto! "${ws}" è pronto. Fai una domanda analitica o carica un file di dati.`,
+    sugNoData1: 'KPI principali per le aziende',
+    sugNoData2: 'Come analizzare al meglio i dati di vendita?',
+    sugFile: (f) => `Cosa possiamo dedurre da ${f}?`,
+    sugPatterns: 'Quali sono i principali trend e anomalie?',
+    sugActions: 'Suggerisci decisioni pratiche basate su questi dati',
+    recEmptyTitle: (c) => `Carica dati per ${c} progetti vuoti`,
+    recEmptyBody: 'Hai progetti in questo reparto senza file caricati.',
+    recReportTitle: 'Crea il tuo primo report esecutivo',
+    recReportBody: (c) => `Hai ${c} file analizzati pronti per l'esportazione PDF o Excel.`,
+    recAnalyticsTitle: 'Esplora Analisi Avanzate',
+    recAnalyticsBody: 'Confronta metriche e colonne per approfondire.',
+    recTeamTitle: 'Invita il team',
+    recTeamBody: 'Condividi progetti e report con analisti e visualizzatori.',
+    recProjectsTitle: 'Esamina i progetti',
+    recProjectsBody: 'Visualizza tutti i grafici interattivi del reparto.',
+    chatError: 'Spiacenti, impossibile ottenere una risposta al momento',
+  },
+  fr: {
+    readingFiles: 'Lecture des fichiers...',
+    connectedLive: 'En ligne • Analyse vos données en direct',
+    clearChat: 'Effacer la discussion',
+    thinking: 'Lecture du tableau et extraction des conclusions...',
+    sources: 'Sources :',
+    recentReports: 'Rapports récents',
+    all: 'Tout',
+    noSavedReports: 'Aucun rapport enregistré dans ce département.',
+    welcomeWithFiles: (ws, c, r) =>
+      `Bienvenue ! J'ai chargé "${ws}" (${c} fichiers, ${r} lignes). Posez-moi vos questions sur les chiffres de vos tableaux.`,
+    welcomeEmpty: (ws) =>
+      `Bienvenue ! "${ws}" est prêt. Posez une question analytique ou importez un fichier de données.`,
+    sugNoData1: 'Indicateurs clés KPI pour entreprises',
+    sugNoData2: 'Comment analyser efficacement les ventes ?',
+    sugFile: (f) => `Que peut-on conclure de ${f} ?`,
+    sugPatterns: 'Quelles sont les tendances et anomalies majeures ?',
+    sugActions: 'Proposez des décisions concrètes basées sur ces données',
+    recEmptyTitle: (c) => `Importer des données pour ${c} projets vides`,
+    recEmptyBody: 'Vous avez des projets sans fichiers importés dans ce département.',
+    recReportTitle: 'Créer votre premier rapport exécutif',
+    recReportBody: (c) => `Vous avez ${c} fichiers analysés prêts à exporter en PDF ou Excel.`,
+    recAnalyticsTitle: 'Explorer les analyses avancées',
+    recAnalyticsBody: 'Comparez les indicateurs et colonnes pour aller plus loin.',
+    recTeamTitle: 'Inviter votre équipe',
+    recTeamBody: 'Partagez projets et rapports avec les analystes et lecteurs.',
+    recProjectsTitle: 'Voir les projets du département',
+    recProjectsBody: 'Consultez tous les graphiques interactifs des projets.',
+    chatError: 'Désolé, impossible d’obtenir une réponse pour le moment',
+  },
+  ru: {
+    readingFiles: 'Чтение файлов...',
+    connectedLive: 'Онлайн • Анализ данных в реальном времени',
+    clearChat: 'Очистить чат',
+    thinking: 'Чтение таблицы и формирование выводов...',
+    sources: 'Источники:',
+    recentReports: 'Последние отчёты',
+    all: 'Все',
+    noSavedReports: 'В этом отделе пока нет сохранённых отчётов.',
+    welcomeWithFiles: (ws, c, r) =>
+      `Добро пожаловать! Я загрузил данные отдела "${ws}" (${c} файлов, ${r} записей). Спрашивайте о любых показателях и цифрах.`,
+    welcomeEmpty: (ws) =>
+      `Добро пожаловать! Отдел "${ws}" готов к работе. Задайте вопрос или загрузите файл данных.`,
+    sugNoData1: 'Ключевые KPI для бизнеса',
+    sugNoData2: 'Как эффективно анализировать продажи?',
+    sugFile: (f) => `Какие выводы можно сделать из файла ${f}?`,
+    sugPatterns: 'Каковы основные закономерности и отклонения?',
+    sugActions: 'Предложите практические решения на основе этих данных',
+    recEmptyTitle: (c) => `Загрузите данные для ${c} пустых проектов`,
+    recEmptyBody: 'В этом отделе есть проекты без загруженных файлов.',
+    recReportTitle: 'Создайте первый аналитический отчёт',
+    recReportBody: (c) => `У вас ${c} проанализированных файлов, готовых к экспорту.`,
+    recAnalyticsTitle: 'Расширенная аналитика',
+    recAnalyticsBody: 'Сравнивайте показатели и столбцы для глубокого анализа.',
+    recTeamTitle: 'Пригласите команду',
+    recTeamBody: 'Поделитесь проектами и отчётами с аналитиками.',
+    recProjectsTitle: 'Обзор проектов отдела',
+    recProjectsBody: 'Просмотрите все интерактивные графики проектов.',
+    chatError: 'Извините, не удалось получить ответ сейчас',
+  },
+  tr: {
+    readingFiles: 'Dosyalar okunuyor...',
+    connectedLive: 'Çevrimiçi • Verilerinizi canlı analiz ediyor',
+    clearChat: 'Sohbeti temizle',
+    thinking: 'Tablo okunuyor ve sonuçlar çıkarılıyor...',
+    sources: 'Kaynaklar:',
+    recentReports: 'Son Raporlar',
+    all: 'Tümü',
+    noSavedReports: 'Bu departmanda henüz kayıtlı rapor yok.',
+    welcomeWithFiles: (ws, c, r) =>
+      `Hoş geldiniz! "${ws}" verilerini yükledim (${c} dosya, ${r} kayıt). Tablolarınızdaki herhangi bir rakam hakkında soru sorabilirsiniz.`,
+    welcomeEmpty: (ws) =>
+      `Hoş geldiniz! "${ws}" hazır. Analitik bir soru sorun veya bir veri dosyası yükleyin.`,
+    sugNoData1: 'Şirketler için temel KPI göstergeleri',
+    sugNoData2: 'Satış verileri profesyonelce nasıl analiz edilir?',
+    sugFile: (f) => `${f} dosyasından ne sonuç çıkarabiliriz?`,
+    sugPatterns: 'Rakamlar arasındaki temel eğilimler ve farklar nelerdir?',
+    sugActions: 'Bu verilere dayanarak pratik kararlar önerin',
+    recEmptyTitle: (c) => `${c} boş proje için veri yükleyin`,
+    recEmptyBody: 'Bu departmanda henüz veri dosyası yüklenmemiş projeleriniz var.',
+    recReportTitle: 'İlk yönetici raporunuzu oluşturun',
+    recReportBody: (c) => `PDF veya Excel olarak dışa aktarılmaya hazır ${c} analiz edilmiş dosyanız var.`,
+    recAnalyticsTitle: 'Gelişmiş Analitiği Keşfedin',
+    recAnalyticsBody: 'Daha derin içgörüler için göstergeleri ve sütunları karşılaştırın.',
+    recTeamTitle: 'Ekibinizi davet edin',
+    recTeamBody: 'Projeleri ve raporları analistler ve izleyicilerle paylaşın.',
+    recProjectsTitle: 'Departman Projelerini İnceleyin',
+    recProjectsBody: 'Departman projelerinin tüm etkileşimli grafiklerini görüntüleyin.',
+    chatError: 'Üzgünüz, şu anda yanıt alınamadı',
+  },
 }
 
 function FormattedChatText({ text }: { text: string }) {
@@ -88,7 +361,11 @@ function FormattedChatText({ text }: { text: string }) {
 
 export function RightSidebar() {
   const router = useRouter()
-  const { t } = useTranslation()
+  const { t, lang } = useTranslation()
+  const L = SIDEBAR_LOCALES[lang] || SIDEBAR_LOCALES.en
+  const currentLangObj =
+    SUPPORTED_LANGUAGES.find((l) => l.code === lang) || SUPPORTED_LANGUAGES[0]
+
   const {
     activeWorkspaceId,
     activeWorkspace,
@@ -139,7 +416,7 @@ export function RightSidebar() {
         setProjects(
           projList.map((p: any) => ({
             id: p.id || p.projectId,
-            name: p.name || 'مشروع',
+            name: p.name || 'Project',
           }))
         )
         setMembersCount(Array.isArray(rawMembers) && rawMembers.length > 0 ? rawMembers.length : 1)
@@ -150,7 +427,7 @@ export function RightSidebar() {
 
         for (const p of projList) {
           const pid = p.id || p.projectId
-          const pname = p.name || 'مشروع'
+          const pname = p.name || 'Project'
           if (!pid) continue
 
           const storageKey = `insightflow_project_files_${pid}`
@@ -172,7 +449,7 @@ export function RightSidebar() {
           if (Array.isArray(filesSource) && filesSource.length > 0) {
             for (const rf of filesSource) {
               const dsId = rf.datasetId || rf.fileId || rf.id
-              const fname = rf.fileName || rf.originalFileName || rf.name || 'ملف بيانات'
+              const fname = rf.fileName || rf.originalFileName || rf.name || 'Dataset'
               const localMatch = cachedMap.get(dsId) || cachedMap.get(fname)
               const dedupKey = `${pid}::${fname}`
 
@@ -180,7 +457,6 @@ export function RightSidebar() {
                 ? localMatch.insights
                 : []
 
-              // إذا لم تكن الحقائق الإحصائية مخزنة محلياً، نجلبها من endpoint التحليل الفعلي في الباك إند
               if (insightsArr.length === 0 && dsId) {
                 const insRes = await apiRequest<any>(
                   `/api/analytics/datasets/${dsId}/insights`,
@@ -199,7 +475,7 @@ export function RightSidebar() {
 
               const statisticalFacts = insightsArr.map(
                 (i: any) =>
-                  `${i.title || i.Title}: ${(i.description || i.Description || '').split('التوصية:')[0].trim()}`
+                  `${i.title || i.Title}: ${(i.description || i.Description || '').split(/التوصية:|Recommendation:|Empfehlung:/)[0].trim()}`
               )
 
               uniqueDatasetsMap.set(dedupKey, {
@@ -226,7 +502,7 @@ export function RightSidebar() {
             projReports.forEach((rep: any) => {
               collectedReports.push({
                 id: rep.reportId || rep.id,
-                title: rep.title || 'تقرير تحليلي',
+                title: rep.title || 'Report',
                 projectName: pname,
                 createdAt: rep.createdAt || new Date().toISOString(),
                 type: rep.reportType || 'Summary',
@@ -244,10 +520,11 @@ export function RightSidebar() {
         setRecentReports(collectedReports.slice(0, 3))
 
         const totalRows = collectedDatasets.reduce((sum, d) => sum + d.rowCount, 0)
+        const wsLabel = activeWorkspace?.name || 'Workspace'
         const introText =
           collectedDatasets.length > 0
-            ? `أهلاً بك! قرأت ملفات قسم "${activeWorkspace?.name || 'القسم النشط'}" (${collectedDatasets.length} ملفات، ${totalRows.toLocaleString()} سجل). اسألني عن أي تفاصيل أو أرقام داخل الجداول وسأحللها لك مباشرة.`
-            : `أهلاً بك! قسم "${activeWorkspace?.name || 'الحالي'}" جاهز. اسألني أي سؤال تحليلي أو ارفع ملف بيانات وسأساعدك فوراً.`
+            ? L.welcomeWithFiles(wsLabel, collectedDatasets.length, totalRows.toLocaleString(lang))
+            : L.welcomeEmpty(wsLabel)
 
         setMessages([{ id: 'welcome', sender: 'ai', text: introText }])
       } catch (err) {
@@ -258,19 +535,15 @@ export function RightSidebar() {
     }
 
     loadSidebarContext()
-  }, [activeWorkspaceId, activeWorkspace?.name, roleLoading])
+  }, [activeWorkspaceId, activeWorkspace?.name, roleLoading, lang])
 
   const smartSuggestions = useMemo(() => {
     if (datasets.length === 0) {
-      return ['أهم مؤشرات الأداء KPIs للشركات', 'كيف أحلل بيانات المبيعات باحتراف؟']
+      return [L.sugNoData1, L.sugNoData2]
     }
     const latestFile = datasets[datasets.length - 1]
-    return [
-      `ماذا نستنتج من ملف ${latestFile.fileName}؟`,
-      'ما هي أبرز الأنماط والفروق في الأرقام؟',
-      'اقترح قرارات عملية بناءً على هذه البيانات',
-    ]
-  }, [datasets])
+    return [L.sugFile(latestFile.fileName), L.sugPatterns, L.sugActions]
+  }, [datasets, L])
 
   const dynamicRecommendations = useMemo(() => {
     const list: Array<{
@@ -282,8 +555,8 @@ export function RightSidebar() {
 
     if (emptyProjectsCount > 0 && canAnalyzeAndUpload) {
       list.push({
-        title: `ارفع بيانات لـ ${emptyProjectsCount} مشاريع فارغة`,
-        body: 'لديك مشاريع في هذا القسم لم تُرفع لها ملفات بيانات بعد.',
+        title: L.recEmptyTitle(emptyProjectsCount),
+        body: L.recEmptyBody,
         tone: 'text-primary bg-primary/15',
         href: '/upload',
       })
@@ -291,15 +564,15 @@ export function RightSidebar() {
 
     if (datasets.length > 0 && recentReports.length === 0) {
       list.push({
-        title: 'أنشئ أول تقرير تنفيذي',
-        body: `لديك ${datasets.length} ملفات محللة جاهزة للتصدير كـ PDF أو Excel.`,
+        title: L.recReportTitle,
+        body: L.recReportBody(datasets.length),
         tone: 'text-emerald-400 bg-emerald-500/15',
         href: '/reports',
       })
     } else if (datasets.length > 0) {
       list.push({
-        title: 'استكشف التحليلات المتقدمة',
-        body: 'قارن بين المؤشرات والأعمدة واستخرج رؤى أعمق.',
+        title: L.recAnalyticsTitle,
+        body: L.recAnalyticsBody,
         tone: 'text-cyan-400 bg-cyan-500/15',
         href: '/analytics',
       })
@@ -307,8 +580,8 @@ export function RightSidebar() {
 
     if (membersCount <= 1 && canManageTeam) {
       list.push({
-        title: 'ادعُ فريق العمل للقسم',
-        body: 'شارك المشاريع والتقارير مع المحللين والمشاهدين.',
+        title: L.recTeamTitle,
+        body: L.recTeamBody,
         tone: 'text-amber-400 bg-amber-500/15',
         href: '/team',
       })
@@ -316,15 +589,15 @@ export function RightSidebar() {
 
     if (list.length === 0) {
       list.push({
-        title: 'مراجعة لوحة المشاريع',
-        body: 'استعرض جميع الرسوم البيانية التفاعلية لمشاريع القسم.',
+        title: L.recProjectsTitle,
+        body: L.recProjectsBody,
         tone: 'text-primary bg-primary/15',
         href: '/projects',
       })
     }
 
     return list.slice(0, 3)
-  }, [emptyProjectsCount, datasets.length, recentReports.length, membersCount, canAnalyzeAndUpload, canManageTeam])
+  }, [emptyProjectsCount, datasets.length, recentReports.length, membersCount, canAnalyzeAndUpload, canManageTeam, L])
 
   async function handleSendQuestion(questionText?: string) {
     const q = (questionText ?? inputValue).trim()
@@ -338,7 +611,8 @@ export function RightSidebar() {
 
     try {
       const workspaceContext = {
-        workspaceName: activeWorkspace?.name || 'القسم النشط',
+        workspaceName: activeWorkspace?.name || 'Workspace',
+        preferredLanguage: `${currentLangObj.englishName} (${currentLangObj.nativeName})`,
         datasets: datasets.map((d) => ({
           fileName: d.fileName,
           projectName: d.projectName,
@@ -354,7 +628,7 @@ export function RightSidebar() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: q,
+          message: `[Respond strictly in ${currentLangObj.englishName} (${currentLangObj.nativeName})]\n${q}`,
           history: updatedMessages,
           workspaceContext,
         }),
@@ -363,7 +637,7 @@ export function RightSidebar() {
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data?.error || 'فشل الاتصال بالمساعد الذكي')
+        throw new Error(data?.error || L.chatError)
       }
 
       setMessages((prev) => [
@@ -381,7 +655,7 @@ export function RightSidebar() {
         {
           id: `err-${Date.now()}`,
           sender: 'ai',
-          text: `عذراً، تعذر الحصول على إجابة حالياً: ${err?.message || 'تحقق من إعداد مفتاح API'}`,
+          text: `${L.chatError}: ${err?.message || ''}`,
         },
       ])
     } finally {
@@ -391,7 +665,7 @@ export function RightSidebar() {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      {/* المساعد الذكي */}
+      {/* AI Assistant */}
       <div className="glass overflow-hidden rounded-2xl">
         <div className="flex items-center justify-between border-b border-border bg-primary/10 px-4 py-3">
           <div className="flex items-center gap-2">
@@ -399,17 +673,17 @@ export function RightSidebar() {
               <Sparkles className="h-4 w-4" />
             </span>
             <div>
-              <p className="text-sm font-semibold">{t.aiAssistant || 'المساعد الذكي'}</p>
+              <p className="text-sm font-semibold">{t.aiAssistant}</p>
               <p className="flex items-center gap-1 text-xs text-muted-foreground">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{' '}
-                {dataLoading ? 'جاري قراءة الملفات...' : 'متصل • يحلل بياناتك مباشرة'}
+                {dataLoading ? L.readingFiles : L.connectedLive}
               </p>
             </div>
           </div>
           {messages.length > 1 && (
             <button
               onClick={() => setMessages((prev) => prev.slice(0, 1))}
-              title="مسح المحادثة"
+              title={L.clearChat}
               className="rounded-lg p-1.5 text-muted-foreground hover:bg-background/50 hover:text-foreground"
             >
               <RotateCcw className="h-3.5 w-3.5" />
@@ -433,7 +707,7 @@ export function RightSidebar() {
                 {msg.sources && msg.sources.length > 0 && (
                   <div className="mt-2.5 border-t border-border/60 pt-2">
                     <p className="mb-1 flex items-center gap-1 text-[10px] font-semibold text-muted-foreground">
-                      <Globe className="h-3 w-3 text-primary" /> المصادر:
+                      <Globe className="h-3 w-3 text-primary" /> {L.sources}
                     </p>
                     <div className="flex flex-col gap-1">
                       {msg.sources.map((src, i) => (
@@ -444,7 +718,7 @@ export function RightSidebar() {
                           rel="noopener noreferrer"
                           className="truncate text-[10px] text-primary hover:underline"
                         >
-                          • {src.title}
+                          - {src.title}
                         </a>
                       ))}
                     </div>
@@ -455,7 +729,7 @@ export function RightSidebar() {
             {isThinking && (
               <div className="flex items-center gap-2 rounded-xl bg-secondary p-3 text-xs text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                جاري قراءة الجدول واستخراج الاستنتاجات...
+                {L.thinking}
               </div>
             )}
           </div>
@@ -484,7 +758,7 @@ export function RightSidebar() {
             <input
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              placeholder={t.askAnythingData || 'اسأل عن أي عمود أو رقم في ملفاتك...'}
+              placeholder={t.askAnythingData}
               className="h-10 w-full rounded-xl border border-border bg-background/60 ps-3.5 pe-10 text-xs placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
             <button
@@ -499,11 +773,11 @@ export function RightSidebar() {
         </div>
       </div>
 
-      {/* التوصيات الذكية */}
+      {/* Recommendations */}
       <div className="glass rounded-2xl p-4">
         <div className="mb-3 flex items-center gap-2">
           <Zap className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold">{t.recommendations || 'التوصيات'}</h3>
+          <h3 className="text-sm font-semibold">{t.recommendations}</h3>
         </div>
         <div className="space-y-2">
           {dynamicRecommendations.map((r) => (
@@ -530,19 +804,19 @@ export function RightSidebar() {
         </div>
       </div>
 
-      {/* أحدث التقارير المحفوظة */}
+      {/* Recent Reports */}
       <div className="glass rounded-2xl p-4">
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">أحدث التقارير</h3>
+            <h3 className="text-sm font-semibold">{L.recentReports}</h3>
           </div>
           <button
             type="button"
             onClick={() => router.push('/reports')}
             className="text-[11px] font-medium text-primary hover:underline"
           >
-            الكل
+            {L.all}
           </button>
         </div>
 
@@ -558,7 +832,7 @@ export function RightSidebar() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-semibold text-foreground">{r.title}</p>
                   <p className="truncate text-[11px] text-muted-foreground">
-                    {r.projectName} • {new Date(r.createdAt).toLocaleDateString('ar-EG')}
+                    {r.projectName} • {new Date(r.createdAt).toLocaleDateString(lang)}
                   </p>
                 </div>
                 <span className="shrink-0 rounded-md bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">
@@ -569,7 +843,7 @@ export function RightSidebar() {
           </div>
         ) : (
           <p className="rounded-xl border border-dashed border-border bg-background/30 p-3 text-center text-[11px] text-muted-foreground">
-            لا توجد تقارير محفوظة في هذا القسم بعد.
+            {L.noSavedReports}
           </p>
         )}
       </div>
