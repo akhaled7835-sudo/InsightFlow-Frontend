@@ -19,7 +19,14 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
   const router = useRouter()
   const [session, setSession] = useState<AuthSession | null>(null)
   const { t } = useTranslation()
-  const { workspaces, activeWorkspaceId, switchWorkspace, role } = useWorkspaceRole()
+  const {
+    workspaces,
+    activeWorkspace,
+    activeWorkspaceId,
+    switchWorkspace,
+    role,
+    loading: wsLoading,
+  } = useWorkspaceRole()
 
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newWsName, setNewWsName] = useState('')
@@ -73,6 +80,13 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
     .slice(0, 2)
     .toUpperCase()
 
+  const displayedWorkspaces =
+    workspaces.length > 0
+      ? workspaces
+      : activeWorkspace
+        ? [activeWorkspace]
+        : []
+
   return (
     <>
       <header className="sticky top-0 z-30 flex flex-wrap items-center gap-3 border-b border-border bg-background/80 px-4 py-3 backdrop-blur-md sm:px-6">
@@ -95,8 +109,10 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
                 aria-label="اختر مساحة العمل أو القسم"
                 className="h-10 max-w-[190px] truncate rounded-xl border border-border bg-card/80 ps-8 pe-3 text-xs font-semibold text-foreground outline-none transition-colors hover:border-primary/50 focus:border-primary"
               >
-                {workspaces.length === 0 && <option value="">جاري التحميل...</option>}
-                {workspaces.map((ws) => (
+                {displayedWorkspaces.length === 0 && (
+                  <option value="">{wsLoading ? 'جاري التحميل...' : 'مساحة العمل الرئيسية'}</option>
+                )}
+                {displayedWorkspaces.map((ws) => (
                   <option key={ws.id} value={ws.id} className="bg-slate-900">
                     {ws.name}
                   </option>

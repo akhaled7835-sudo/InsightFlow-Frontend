@@ -43,7 +43,7 @@ export default function TeamPage() {
     activeWorkspace,
   } = useWorkspaceRole()
 
-  const [workspaceName, setWorkspaceName] = useState('Acme Analytics')
+  const [workspaceName, setWorkspaceName] = useState('')
   const [workspaceId, setWorkspaceId] = useState<string>('')
   const [members, setMembers] = useState<TeamMember[]>([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -56,6 +56,12 @@ export default function TeamPage() {
   const [inviteError, setInviteError] = useState('')
 
   useEffect(() => {
+    if (activeWorkspace?.name) {
+      setWorkspaceName(activeWorkspace.name)
+    }
+  }, [activeWorkspace?.name])
+
+  useEffect(() => {
     if (roleLoading) return
 
     async function loadWorkspaceTeam() {
@@ -63,22 +69,7 @@ export default function TeamPage() {
       const currentUserName = session?.fullName || (session as any)?.name || 'Amr Khaled'
       const currentUserEmail = session?.email || 'akhaled7835@gmail.com'
 
-      let wsId = activeWorkspaceId || session?.workspaceId || 'default'
-      if (activeWorkspace?.name) {
-        setWorkspaceName(activeWorkspace.name)
-      } else {
-        try {
-          const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
-          const selectedWs =
-            wsList?.find((w: any) => (w.id || w.workspaceId) === activeWorkspaceId) || wsList?.[0]
-          if (selectedWs) {
-            wsId = selectedWs.id || selectedWs.workspaceId || wsId
-            if (selectedWs.name) setWorkspaceName(selectedWs.name)
-          }
-        } catch {
-          // fallback
-        }
-      }
+      const wsId = activeWorkspaceId || session?.workspaceId || 'default'
       setWorkspaceId(wsId)
 
       const storageKey = `insightflow_team_${wsId}`
@@ -126,7 +117,7 @@ export default function TeamPage() {
     }
 
     loadWorkspaceTeam()
-  }, [activeWorkspaceId, activeWorkspace?.name, roleLoading])
+  }, [activeWorkspaceId, roleLoading])
 
   function persistMembers(updated: TeamMember[]) {
     setMembers(updated)
@@ -203,6 +194,8 @@ export default function TeamPage() {
       m.email.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
+  const displayedWorkspaceName = activeWorkspace?.name || workspaceName || 'مساحة العمل'
+
   return (
     <DashboardShell activeItem="team">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 p-6">
@@ -216,7 +209,7 @@ export default function TeamPage() {
                 <h1 className="text-xl font-bold tracking-tight">إدارة فريق العمل</h1>
                 <span className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary/70 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
                   <Building2 className="h-3 w-3 text-primary" />
-                  {workspaceName}
+                  {displayedWorkspaceName}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
