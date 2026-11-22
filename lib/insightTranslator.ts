@@ -44,7 +44,7 @@ const INSIGHT_TEMPLATES: Record<
       'Recommendation: Distribution is relatively balanced; focus on boosting the performance of under-represented categories.',
     varianceTitle: (metric, col) => `${metric} Variance by (${col})`,
     varianceDesc: (topCat, topVal, pctDiff, metric, lowCat, lowVal) =>
-      `Category '${topCat}' leads (${topVal}), outperforming '${lowCat}' (${lowVal}) by ${pctDiff}% on ${metric}.`,
+      `Category '${topCat}' leads with ${metric} of ${topVal}, outperforming '${lowCat}' (${lowVal}) by ${pctDiff}%.`,
     varianceRec: (topCat) =>
       `Recommendation: Study the outperformance drivers of '${topCat}' and replicate best practices to elevate lower-performing segments.`,
   },
@@ -61,7 +61,7 @@ const INSIGHT_TEMPLATES: Record<
       'Empfehlung: Die Verteilung ist relativ ausgewogen; konzentrieren Sie sich auf die Leistungssteigerung schwächer vertretener Kategorien.',
     varianceTitle: (metric, col) => `${metric}-Abweichung nach (${col})`,
     varianceDesc: (topCat, topVal, pctDiff, metric, lowCat, lowVal) =>
-      `Die Kategorie '${topCat}' führt (${topVal}) und übertrifft '${lowCat}' (${lowVal}) um ${pctDiff}% bei ${metric}.`,
+      `Die Kategorie '${topCat}' führt mit ${metric} von ${topVal} und übertrifft '${lowCat}' (${lowVal}) um ${pctDiff}%.`,
     varianceRec: (topCat) =>
       `Empfehlung: Analysieren Sie die Erfolgsfaktoren von '${topCat}' und übertragen Sie Best Practices auf schwächere Segmente.`,
   },
@@ -78,7 +78,7 @@ const INSIGHT_TEMPLATES: Record<
       'Recomendación: La distribución es relativamente equilibrada; enfoque esfuerzos en impulsar las categorías con menor representación.',
     varianceTitle: (metric, col) => `Variación de ${metric} por (${col})`,
     varianceDesc: (topCat, topVal, pctDiff, metric, lowCat, lowVal) =>
-      `La categoría '${topCat}' lidera (${topVal}), superando a '${lowCat}' (${lowVal}) en un ${pctDiff}% en ${metric}.`,
+      `La categoría '${topCat}' lidera con ${metric} de ${topVal}, superando a '${lowCat}' (${lowVal}) en un ${pctDiff}%.`,
     varianceRec: (topCat) =>
       `Recomendación: Estudie los factores de éxito de '${topCat}' y replique las mejores prácticas en los segmentos de menor rendimiento.`,
   },
@@ -95,7 +95,7 @@ const INSIGHT_TEMPLATES: Record<
       'Raccomandazione: La distribuzione è relativamente equilibrata; concentrarsi sul miglioramento delle categorie meno rappresentate.',
     varianceTitle: (metric, col) => `Variazione di ${metric} per (${col})`,
     varianceDesc: (topCat, topVal, pctDiff, metric, lowCat, lowVal) =>
-      `La categoria '${topCat}' è in testa (${topVal}), superando '${lowCat}' (${lowVal}) del ${pctDiff}% su ${metric}.`,
+      `La categoria '${topCat}' è in testa con ${metric} pari a ${topVal}, superando '${lowCat}' (${lowVal}) del ${pctDiff}%.`,
     varianceRec: (topCat) =>
       `Raccomandazione: Analizzare i fattori di successo di '${topCat}' e replicare le best practice nei segmenti meno performanti.`,
   },
@@ -112,7 +112,7 @@ const INSIGHT_TEMPLATES: Record<
       'Recommandation : La distribution est relativement équilibrée ; concentrez-vous sur l’amélioration des catégories moins représentées.',
     varianceTitle: (metric, col) => `Écart de ${metric} par (${col})`,
     varianceDesc: (topCat, topVal, pctDiff, metric, lowCat, lowVal) =>
-      `La catégorie '${topCat}' arrive en tête (${topVal}), dépassant '${lowCat}' (${lowVal}) de ${pctDiff}% sur ${metric}.`,
+      `La catégorie '${topCat}' arrive en tête avec ${metric} de ${topVal}, dépassant '${lowCat}' (${lowVal}) de ${pctDiff}%.`,
     varianceRec: (topCat) =>
       `Recommandation : Étudiez les facteurs de performance de '${topCat}' et appliquez ces bonnes pratiques aux segments moins performants.`,
   },
@@ -129,7 +129,7 @@ const INSIGHT_TEMPLATES: Record<
       'Рекомендация: Распределение относительно сбалансировано; сфокусируйтесь на росте отстающих категорий.',
     varianceTitle: (metric, col) => `Разброс (${metric}) по (${col})`,
     varianceDesc: (topCat, topVal, pctDiff, metric, lowCat, lowVal) =>
-      `Категория '${topCat}' лидирует (${topVal}), опережая '${lowCat}' (${lowVal}) на ${pctDiff}% по показателю ${metric}.`,
+      `Категория '${topCat}' лидирует (${metric}: ${topVal}), опережая '${lowCat}' (${lowVal}) на ${pctDiff}%.`,
     varianceRec: (topCat) =>
       `Рекомендация: Изучите факторы успеха категории '${topCat}' и внедрите лучшие практики в менее результативных сегментах.`,
   },
@@ -146,21 +146,26 @@ const INSIGHT_TEMPLATES: Record<
       'Öneri: Dağılım nispeten dengeli; daha az temsil edilen kategorilerin performansını artırmaya odaklanın.',
     varianceTitle: (metric, col) => `(${col}) Bazında ${metric} Farkı`,
     varianceDesc: (topCat, topVal, pctDiff, metric, lowCat, lowVal) =>
-      `'${topCat}' kategorisi (${topVal}) lider konumda olup ${metric} açısından '${lowCat}' (${lowVal}) kategorisinden %${pctDiff} daha yüksek performans gösterdi.`,
+      `'${topCat}' kategorisi (${metric}: ${topVal}) lider konumda olup '${lowCat}' (${lowVal}) kategorisinden %${pctDiff} daha yüksek performans gösterdi.`,
     varianceRec: (topCat) =>
       `Öneri: '${topCat}' kategorisinin başarı faktörlerini inceleyin ve en iyi uygulamaları düşük performanslı segmentlere yaygınlaştırın.`,
   },
 }
 
-// استخراج الكلمات العربية القصيرة فقط (أسماء الأعمدة والقيم) لترجمتها بسرعة فائقة
+// إزالة التشكيل العربي لتسهيل المطابقة الدقيقة
+function stripDiacritics(str: string): string {
+  return str.replace(/[\u064B-\u065F\u0670]/g, '')
+}
+
 export function extractArabicTokens(insights: InsightItem[]): string[] {
   const tokens = new Set<string>()
   for (const ins of insights) {
-    const colMatch = ins.title.match(/حسب\s*\(([^)]+)\)/)
+    const cleanTitle = stripDiacritics(ins.title)
+    const colMatch = cleanTitle.match(/حسب\s*\(([^)]+)\)/)
     if (colMatch?.[1] && /[\u0600-\u06FF]/.test(colMatch[1])) {
       tokens.add(colMatch[1].trim())
     }
-    const metricMatch = ins.title.match(/^تباين\s+(.+?)\s+حسب/)
+    const metricMatch = cleanTitle.match(/^تباين\s+(.+?)\s+حسب/)
     if (metricMatch?.[1] && /[\u0600-\u06FF]/.test(metricMatch[1])) {
       tokens.add(metricMatch[1].trim())
     }
@@ -181,29 +186,34 @@ export function formatLocalizedInsights(
 ): InsightItem[] {
   if (lang === 'ar') return insights
   const T = INSIGHT_TEMPLATES[lang] || INSIGHT_TEMPLATES.en
-  const tr = (s: string) => dict[s.trim()] || s.trim()
+  const tr = (s: string) => dict[s.trim()] || dict[stripDiacritics(s.trim())] || s.trim()
 
   return insights.map((ins) => {
+    const rawTitle = stripDiacritics(ins.title)
+    const rawDesc = stripDiacritics(ins.description)
     let title = ins.title
     let description = ins.description
 
     // 1) اكتمال البيانات بنسبة 100%
-    const compPct = title.match(/اكتمال البيانات بنسبة\s*(\d+(?:\.\d+)?)%/)
+    const compPct = rawTitle.match(/اكتمال البيانات بنسبة\s*(\d+(?:\.\d+)?)%/)
     if (compPct) {
       title = T.completenessTitle(compPct[1])
-      const rowsM = description.match(/\((\d+)\s*صف\)/)
+      const rowsM = rawDesc.match(/\((\d[\d,]*)\s*صف\)/)
       if (rowsM) {
         description = T.completenessDesc(rowsM[1])
       }
       return { ...ins, title, description }
     }
 
-    // 2) تركز التوزيع حسب (العمود)
-    const concCol = title.match(/تركز التوزيع حسب\s*\(([^)]+)\)/)
+    // 2) تركز / تركّز التوزيع حسب (العمود)
+    const concCol = rawTitle.match(/تركز التوزيع حسب\s*\(([^)]+)\)/)
     if (concCol) {
       title = T.concentrationTitle(tr(concCol[1]))
-      const descM = description.match(
-        /تستحوذ فئة\s*'([^']+)'\s*على الحصة الأكبر بواقع\s*(\d+)\s*سجل\s*\((\d+(?:\.\d+)?)%\s*من الإجمالي\)،\s*بينما سجلت\s*'([^']+)'\s*الحد الأدنى\s*\((\d+)\)/
+      const descM = rawDesc.match(
+        /تستحوذ فئة\s*'([^']+)'\s*على الحصة الاكبر بواقع\s*(\d[\d,]*)\s*سجل\s*\((\d+(?:\.\d+)?)%\s*من الاجمالي\)،?\s*بينما سجلت\s*'([^']+)'\s*الحد الادنى\s*\((\d[\d,]*)\)/
+      ) ||
+      rawDesc.match(
+        /تستحوذ فئة\s*'([^']+)'\s*على الحصة الأكبر بواقع\s*(\d[\d,]*)\s*سجل\s*\((\d+(?:\.\d+)?)%\s*من الإجمالي\)،?\s*بينما سجلت\s*'([^']+)'\s*الحد الأدنى\s*\((\d[\d,]*)\)/
       )
       if (descM) {
         const body = T.concentrationDesc(
@@ -213,7 +223,7 @@ export function formatLocalizedInsights(
           tr(descM[4]),
           descM[5]
         )
-        const rec = description.includes('اعتماد مرتفع')
+        const rec = rawDesc.includes('اعتماد مرتفع')
           ? T.concentrationRecHigh
           : T.concentrationRecBalanced
         description = `${body} ${rec}`
@@ -222,22 +232,24 @@ export function formatLocalizedInsights(
     }
 
     // 3) تباين X حسب (Y)
-    const varM = title.match(/^تباين\s+(.+?)\s+حسب\s*\(([^)]+)\)/)
+    const varM = rawTitle.match(/^تباين\s+(.+?)\s+حسب\s*\(([^)]+)\)/)
     if (varM) {
       title = T.varianceTitle(tr(varM[1]), tr(varM[2]))
-      const descM = description.match(
-        /تتصدر فئة\s*'([^']+)'\s*\(([^)]+)\)\s*متفوقة بنسبة\s*(\d+(?:\.\d+)?)%\s*على\s*(.+?)\s*لـ\s*'([^']+)'\s*البالغ\s*([^\s.]+(?:\.\d+)?)/
+
+      // الصيغة الفعلية من الـ Backend: تتصدر فئة 'Sales Manager' بـ Average 35,000.00 متفوقة بنسبة 165.2% على 'Sales rep.' (13,199.17).
+      const descBackendFormat = rawDesc.match(
+        /تتصدر فئة\s*'([^']+)'\s*بـ\s*([^\s]+)\s+([\d,]+(?:\.\d+)?)\s*متفوقة بنسبة\s*(\d+(?:\.\d+)?)%\s*على\s*'([^']+)'\s*\(([\d,]+(?:\.\d+)?)\)/
       )
-      if (descM) {
+      if (descBackendFormat) {
         const body = T.varianceDesc(
-          tr(descM[1]),
-          descM[2],
-          descM[3],
-          tr(descM[4]),
-          tr(descM[5]),
-          descM[6]
+          tr(descBackendFormat[1]),
+          descBackendFormat[3],
+          descBackendFormat[4],
+          tr(descBackendFormat[2]),
+          tr(descBackendFormat[5]),
+          descBackendFormat[6]
         )
-        const rec = T.varianceRec(tr(descM[1]))
+        const rec = T.varianceRec(tr(descBackendFormat[1]))
         description = `${body} ${rec}`
       }
       return { ...ins, title, description }
