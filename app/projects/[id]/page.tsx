@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import { extractArabicTokens, formatLocalizedInsights } from '@/lib/insightTranslator'
+import { extractArabicTokens } from '@/lib/insightTranslator'
 import { useParams } from 'next/navigation'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
 import { apiRequest, getSession } from '@/lib/api'
@@ -23,8 +23,6 @@ import {
   Award,
   Layers,
   RefreshCw,
-  Sparkles,
-  Lightbulb,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -99,8 +97,6 @@ const PROJECT_DASH_LOCALES: Record<
     shareDistSub: (lbl: string) => string
     compTitle: (a: string, b: string) => string
     compSub: (a: string, b: string) => string
-    insightsSectionTitle: string
-    recommendationLabel: string
     emptyTitle: string
     emptyDescUpload: string
     emptyDescViewer: string
@@ -139,8 +135,6 @@ const PROJECT_DASH_LOCALES: Record<
     shareDistSub: (lbl) => `Share of (${lbl}) out of total records`,
     compTitle: (a, b) => `Comparison: ${a} vs ${b}`,
     compSub: (a, b) => `Numerical variance analysis between ${a} and ${b}`,
-    insightsSectionTitle: 'Detailed Findings & Actionable Recommendations',
-    recommendationLabel: 'Recommendation',
     emptyTitle: 'No data uploaded for this project yet',
     emptyDescUpload: 'Go to Upload Data, select this project, and upload an Excel or CSV file to generate KPIs and charts.',
     emptyDescViewer: 'Your team has not uploaded any datasets to this project yet.',
@@ -178,8 +172,6 @@ const PROJECT_DASH_LOCALES: Record<
     shareDistSub: (lbl) => `استحواذ شريحة (${lbl}) من إجمالي السجلات`,
     compTitle: (a, b) => `مقارنة ${a} و ${b}`,
     compSub: (a, b) => `تحليل الفروق الرقمية بين ${a} و ${b}`,
-    insightsSectionTitle: 'النتائج التفصيلية والتوصيات القابلة للتنفيذ',
-    recommendationLabel: 'التوصية',
     emptyTitle: 'لا توجد بيانات مرفوعة لهذا المشروع بعد',
     emptyDescUpload: 'اذهب إلى صفحة رفع البيانات، اختر هذا المشروع، وارفع ملف Excel أو CSV لتظهر هنا مؤشرات الأعمال والرسوم البيانية المتكاملة.',
     emptyDescViewer: 'لم يقم فريق العمل برفع أي ملفات بيانات لهذا المشروع بعد.',
@@ -217,8 +209,6 @@ const PROJECT_DASH_LOCALES: Record<
     shareDistSub: (lbl) => `Anteil von (${lbl}) an den Gesamtdatensätzen`,
     compTitle: (a, b) => `Vergleich: ${a} vs. ${b}`,
     compSub: (a, b) => `Numerische Abweichungsanalyse zwischen ${a} und ${b}`,
-    insightsSectionTitle: 'Detaillierte Ergebnisse & Handlungsempfehlungen',
-    recommendationLabel: 'Empfehlung',
     emptyTitle: 'Noch keine Daten für dieses Projekt hochgeladen',
     emptyDescUpload: 'Gehen Sie zu Daten hochladen, wählen Sie dieses Projekt und laden Sie eine Excel- oder CSV-Datei hoch.',
     emptyDescViewer: 'Ihr Team hat für dieses Projekt noch keine Datensätze hochgeladen.',
@@ -256,8 +246,6 @@ const PROJECT_DASH_LOCALES: Record<
     shareDistSub: (lbl) => `Participación de (${lbl}) sobre el total de registros`,
     compTitle: (a, b) => `Comparación: ${a} vs ${b}`,
     compSub: (a, b) => `Análisis de diferencia numérica entre ${a} y ${b}`,
-    insightsSectionTitle: 'Hallazgos detallados y recomendaciones',
-    recommendationLabel: 'Recomendación',
     emptyTitle: 'Aún no hay datos subidos para este proyecto',
     emptyDescUpload: 'Ve a Subir datos, selecciona este proyecto y sube un archivo Excel o CSV.',
     emptyDescViewer: 'Tu equipo aún no ha subido archivos para este proyecto.',
@@ -295,8 +283,6 @@ const PROJECT_DASH_LOCALES: Record<
     shareDistSub: (lbl) => `Quota di (${lbl}) sul totale dei record`,
     compTitle: (a, b) => `Confronto: ${a} vs ${b}`,
     compSub: (a, b) => `Analisi dello scostamento numerico tra ${a} e ${b}`,
-    insightsSectionTitle: 'Risultati dettagliati e raccomandazioni',
-    recommendationLabel: 'Raccomandazione',
     emptyTitle: 'Nessun dato caricato per questo progetto',
     emptyDescUpload: 'Vai su Carica dati, seleziona questo progetto e carica un file Excel o CSV.',
     emptyDescViewer: 'Il team non ha ancora caricato file per questo progetto.',
@@ -334,8 +320,6 @@ const PROJECT_DASH_LOCALES: Record<
     shareDistSub: (lbl) => `Part de (${lbl}) sur le total des enregistrements`,
     compTitle: (a, b) => `Comparaison : ${a} vs ${b}`,
     compSub: (a, b) => `Analyse de l’écart numérique entre ${a} et ${b}`,
-    insightsSectionTitle: 'Résultats détaillés et recommandations',
-    recommendationLabel: 'Recommandation',
     emptyTitle: 'Aucune donnée importée pour ce projet',
     emptyDescUpload: 'Allez dans Importer un fichier, choisissez ce projet et chargez un fichier Excel ou CSV.',
     emptyDescViewer: 'Votre équipe n’a pas encore importé de fichiers pour ce projet.',
@@ -373,8 +357,6 @@ const PROJECT_DASH_LOCALES: Record<
     shareDistSub: (lbl) => `Доля (${lbl}) от общего числа записей`,
     compTitle: (a, b) => `Сравнение: ${a} и ${b}`,
     compSub: (a, b) => `Анализ числовой разницы между ${a} и ${b}`,
-    insightsSectionTitle: 'Подробные результаты и рекомендации',
-    recommendationLabel: 'Рекомендация',
     emptyTitle: 'Для этого проекта ещё не загружены данные',
     emptyDescUpload: 'Перейдите в раздел загрузки данных, выберите проект и загрузите файл Excel или CSV.',
     emptyDescViewer: 'Команда ещё не загрузила файлы для этого проекта.',
@@ -412,8 +394,6 @@ const PROJECT_DASH_LOCALES: Record<
     shareDistSub: (lbl) => `Toplam kayıtlar içinde (${lbl}) payı`,
     compTitle: (a, b) => `Karşılaştırma: ${a} ve ${b}`,
     compSub: (a, b) => `${a} ile ${b} arasındaki sayısal fark analizi`,
-    insightsSectionTitle: 'Ayrıntılı Bulgular ve Öneriler',
-    recommendationLabel: 'Öneri',
     emptyTitle: 'Bu proje için henüz veri yüklenmedi',
     emptyDescUpload: 'Veri Yükle sayfasına gidin, bu projeyi seçin ve bir Excel veya CSV dosyası yükleyin.',
     emptyDescViewer: 'Ekibiniz henüz bu proje için veri dosyası yüklemedi.',
@@ -616,11 +596,6 @@ export default function ProjectDashboardPage() {
       })
       .catch(() => null)
   }, [lang, rawInsights])
-
-  const insights = useMemo(
-    () => formatLocalizedInsights(rawInsights, lang, translatedMap),
-    [rawInsights, lang, translatedMap]
-  )
 
   const tr = useCallback(
     (text: string) => {
@@ -848,7 +823,7 @@ export default function ProjectDashboardPage() {
       if (kpis.length < 4) {
         kpis.push({
           title: L.extractedInsightsKpi,
-          value: `${insights.length}`,
+          value: `${rawInsights.length}`,
           change: L.activeAnalysisBadge,
           isNegative: false,
           sparkline: 'M2 20 L25 18 L45 12 L65 8 L78 4',
@@ -861,7 +836,7 @@ export default function ProjectDashboardPage() {
       smartWidgets: widgets,
       businessKpis: kpis.slice(0, 4),
     }
-  }, [rawInsights, insights.length, totalRecords, activeDataset, L, lang, tr])
+  }, [rawInsights, totalRecords, activeDataset, L, lang, tr])
 
   if (loading || roleLoading) {
     return (
@@ -1005,527 +980,478 @@ export default function ProjectDashboardPage() {
 
         {/* Adaptive Data-Driven Charts Grid */}
         {activeDataset ? (
-          <>
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-              {smartWidgets.map((widget, widgetIdx) => {
-                if (widget.chartType === 'trend_line') {
-                  const w = 540
-                  const h = 210
-                  const padX = 45
-                  const padY = 28
-                  const maxV =
-                    Math.max(...widget.points.flatMap((p) => [p.actual, p.benchmark]), 1) * 1.15
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            {smartWidgets.map((widget, widgetIdx) => {
+              if (widget.chartType === 'trend_line') {
+                const w = 540
+                const h = 210
+                const padX = 45
+                const padY = 28
+                const maxV =
+                  Math.max(...widget.points.flatMap((p) => [p.actual, p.benchmark]), 1) * 1.15
 
-                  const pts = widget.points.map((p, i) => {
-                    const x =
-                      widget.points.length > 1
-                        ? padX + (i / (widget.points.length - 1)) * (w - padX * 2)
-                        : w / 2
-                    const yAct = h - padY - (p.actual / maxV) * (h - padY * 2)
-                    const yBench = h - padY - (p.benchmark / maxV) * (h - padY * 2)
-                    return { ...p, x, yAct, yBench }
-                  })
+                const pts = widget.points.map((p, i) => {
+                  const x =
+                    widget.points.length > 1
+                      ? padX + (i / (widget.points.length - 1)) * (w - padX * 2)
+                      : w / 2
+                  const yAct = h - padY - (p.actual / maxV) * (h - padY * 2)
+                  const yBench = h - padY - (p.benchmark / maxV) * (h - padY * 2)
+                  return { ...p, x, yAct, yBench }
+                })
 
-                  const buildSmooth = (arr: Array<{ x: number; y: number }>) => {
-                    const firstPt = arr[0]
-                    if (!firstPt) return ''
-                    let d = `M ${firstPt.x} ${firstPt.y}`
-                    for (let i = 0; i < arr.length - 1; i++) {
-                      const curr = arr[i]!
-                      const next = arr[i + 1]!
-                      const midX = (curr.x + next.x) / 2
-                      d += ` C ${midX} ${curr.y}, ${midX} ${next.y}, ${next.x} ${next.y}`
-                    }
-                    return d
+                const buildSmooth = (arr: Array<{ x: number; y: number }>) => {
+                  const firstPt = arr[0]
+                  if (!firstPt) return ''
+                  let d = `M ${firstPt.x} ${firstPt.y}`
+                  for (let i = 0; i < arr.length - 1; i++) {
+                    const curr = arr[i]!
+                    const next = arr[i + 1]!
+                    const midX = (curr.x + next.x) / 2
+                    d += ` C ${midX} ${curr.y}, ${midX} ${next.y}, ${next.x} ${next.y}`
                   }
-
-                  const actPath = buildSmooth(pts.map((p) => ({ x: p.x, y: p.yAct })))
-                  const benchPath = buildSmooth(pts.map((p) => ({ x: p.x, y: p.yBench })))
-                  const lastPt = pts[pts.length - 1]
-                  const firstPt = pts[0]
-                  const areaPath =
-                    lastPt && firstPt
-                      ? `${actPath} L ${lastPt.x} ${h - padY} L ${firstPt.x} ${h - padY} Z`
-                      : ''
-
-                  const activeHoverIdx =
-                    hoveredWidgetPoint?.widgetId === widget.id ? hoveredWidgetPoint.index : null
-                  const hoveredPt = activeHoverIdx !== null ? pts[activeHoverIdx] : undefined
-
-                  return (
-                    <div
-                      key={widget.id}
-                      className="rounded-2xl border border-border bg-card/50 p-6 lg:col-span-8"
-                    >
-                      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-4 text-xs">
-                          <span className="flex items-center gap-1.5 font-medium text-foreground">
-                            <span className="h-2.5 w-5 rounded-full bg-primary" /> {L.actualLegend}
-                          </span>
-                          <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
-                            <span className="h-0.5 w-5 border-t-2 border-dashed border-slate-400" />{' '}
-                            {L.baselineLegend}
-                          </span>
-                        </div>
-                        <div className="text-end">
-                          <div className="flex items-center justify-end gap-2">
-                            <h3 className="text-base font-bold">{widget.title}</h3>
-                            <LineChart className="h-4 w-4 text-primary" />
-                          </div>
-                          <p className="text-xs text-muted-foreground">{widget.subtitle}</p>
-                        </div>
-                      </div>
-
-                      <div className="relative mt-2 w-full">
-                        <svg viewBox={`0 0 ${w} ${h}`} className="h-64 w-full overflow-visible">
-                          <defs>
-                            <linearGradient id={`grad-${widget.id}`} x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
-                              <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
-                            </linearGradient>
-                          </defs>
-
-                          {[0, 0.25, 0.5, 0.75, 1].map((r, i) => {
-                            const y = h - padY - r * (h - padY * 2)
-                            return (
-                              <g key={i}>
-                                <line
-                                  x1={padX}
-                                  y1={y}
-                                  x2={w - padX}
-                                  y2={y}
-                                  stroke="currentColor"
-                                  strokeOpacity="0.07"
-                                />
-                                <text
-                                  x={padX - 10}
-                                  y={y + 4}
-                                  textAnchor="end"
-                                  fill="currentColor"
-                                  opacity="0.45"
-                                  className="text-[10px]"
-                                >
-                                  {Math.round(r * maxV)}
-                                </text>
-                              </g>
-                            )
-                          })}
-
-                          <path d={areaPath} fill={`url(#grad-${widget.id})`} />
-                          <path
-                            d={benchPath}
-                            fill="none"
-                            stroke="#94a3b8"
-                            strokeWidth="2"
-                            strokeDasharray="5 5"
-                          />
-                          <path
-                            d={actPath}
-                            fill="none"
-                            stroke="#3b82f6"
-                            strokeWidth="3"
-                            strokeLinecap="round"
-                          />
-
-                          {pts.map((pt, idx) => {
-                            const isHov = activeHoverIdx === idx
-                            return (
-                              <g
-                                key={idx}
-                                className="cursor-pointer"
-                                onMouseEnter={() =>
-                                  setHoveredWidgetPoint({ widgetId: widget.id, index: idx })
-                                }
-                                onMouseLeave={() => setHoveredWidgetPoint(null)}
-                              >
-                                <rect
-                                  x={pt.x - 24}
-                                  y={padY}
-                                  width={48}
-                                  height={h - padY * 2}
-                                  fill="transparent"
-                                />
-                                {isHov && (
-                                  <line
-                                    x1={pt.x}
-                                    y1={padY}
-                                    x2={pt.x}
-                                    y2={h - padY}
-                                    stroke="#3b82f6"
-                                    strokeOpacity="0.4"
-                                    strokeWidth="1.5"
-                                  />
-                                )}
-                                <circle
-                                  cx={pt.x}
-                                  cy={pt.yBench}
-                                  r={isHov ? 5 : 3.5}
-                                  fill="#0f172a"
-                                  stroke="#94a3b8"
-                                  strokeWidth="2"
-                                />
-                                <circle
-                                  cx={pt.x}
-                                  cy={pt.yAct}
-                                  r={isHov ? 6.5 : 4.5}
-                                  fill="#3b82f6"
-                                  stroke="#ffffff"
-                                  strokeWidth="2"
-                                />
-                                <text
-                                  x={pt.x}
-                                  y={h - 6}
-                                  textAnchor="middle"
-                                  fill="currentColor"
-                                  opacity={isHov ? 1 : 0.6}
-                                  className="text-[11px] font-medium"
-                                >
-                                  {pt.label}
-                                </text>
-                              </g>
-                            )
-                          })}
-                        </svg>
-
-                        {hoveredPt && (
-                          <div
-                            className="pointer-events-none absolute top-3 z-20 min-w-[165px] -translate-x-1/2 rounded-xl border border-border bg-slate-950/95 p-3 shadow-2xl backdrop-blur-md"
-                            style={{ left: `${(hoveredPt.x / w) * 100}%` }}
-                          >
-                            <p className="mb-1.5 text-end text-xs font-bold text-foreground">
-                              {hoveredPt.label}
-                            </p>
-                            <div className="space-y-1 text-xs">
-                              <div className="flex items-center justify-between gap-4">
-                                <span className="font-bold text-slate-300">
-                                  {hoveredPt.benchmark.toLocaleString(lang)}
-                                </span>
-                                <span className="flex items-center gap-1.5 text-muted-foreground">
-                                  {L.baselineTooltip}{' '}
-                                  <span className="h-2 w-2 rounded-full bg-slate-400" />
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between gap-4">
-                                <span className="font-bold text-primary">
-                                  {hoveredPt.actual.toLocaleString(lang)}
-                                </span>
-                                <span className="flex items-center gap-1.5 text-muted-foreground">
-                                  {L.actualTooltip}{' '}
-                                  <span className="h-2 w-2 rounded-full bg-primary" />
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
+                  return d
                 }
 
-                if (widget.chartType === 'donut_share') {
-                  const r = 38
-                  const c = 2 * Math.PI * r
-                  const p1 = (widget.percentage / 100) * c
-                  const remPct = 100 - widget.percentage
-                  const p2 = (remPct / 100) * c
+                const actPath = buildSmooth(pts.map((p) => ({ x: p.x, y: p.yAct })))
+                const benchPath = buildSmooth(pts.map((p) => ({ x: p.x, y: p.yBench })))
+                const lastPt = pts[pts.length - 1]
+                const firstPt = pts[0]
+                const areaPath =
+                  lastPt && firstPt
+                    ? `${actPath} L ${lastPt.x} ${h - padY} L ${firstPt.x} ${h - padY} Z`
+                    : ''
 
-                  const activeHoverIdx =
-                    hoveredWidgetPoint?.widgetId === widget.id ? hoveredWidgetPoint.index : null
+                const activeHoverIdx =
+                  hoveredWidgetPoint?.widgetId === widget.id ? hoveredWidgetPoint.index : null
+                const hoveredPt = activeHoverIdx !== null ? pts[activeHoverIdx] : undefined
 
-                  return (
-                    <div
-                      key={widget.id}
-                      className={`flex flex-col justify-between rounded-2xl border border-border bg-card/50 p-6 ${
-                        widgetIdx === 1 ? 'lg:col-span-4' : 'lg:col-span-6'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <PieChart className="h-5 w-5 text-primary" />
-                        <div className="text-end">
+                return (
+                  <div
+                    key={widget.id}
+                    className="rounded-2xl border border-border bg-card/50 p-6 lg:col-span-8"
+                  >
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-4 text-xs">
+                        <span className="flex items-center gap-1.5 font-medium text-foreground">
+                          <span className="h-2.5 w-5 rounded-full bg-primary" /> {L.actualLegend}
+                        </span>
+                        <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
+                          <span className="h-0.5 w-5 border-t-2 border-dashed border-slate-400" />{' '}
+                          {L.baselineLegend}
+                        </span>
+                      </div>
+                      <div className="text-end">
+                        <div className="flex items-center justify-end gap-2">
                           <h3 className="text-base font-bold">{widget.title}</h3>
-                          <p className="mt-0.5 text-xs text-muted-foreground">{widget.subtitle}</p>
+                          <LineChart className="h-4 w-4 text-primary" />
+                        </div>
+                        <p className="text-xs text-muted-foreground">{widget.subtitle}</p>
+                      </div>
+                    </div>
+
+                    <div className="relative mt-2 w-full">
+                      <svg viewBox={`0 0 ${w} ${h}`} className="h-64 w-full overflow-visible">
+                        <defs>
+                          <linearGradient id={`grad-${widget.id}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
+                            <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
+                          </linearGradient>
+                        </defs>
+
+                        {[0, 0.25, 0.5, 0.75, 1].map((r, i) => {
+                          const y = h - padY - r * (h - padY * 2)
+                          return (
+                            <g key={i}>
+                              <line
+                                x1={padX}
+                                y1={y}
+                                x2={w - padX}
+                                y2={y}
+                                stroke="currentColor"
+                                strokeOpacity="0.07"
+                              />
+                              <text
+                                x={padX - 10}
+                                y={y + 4}
+                                textAnchor="end"
+                                fill="currentColor"
+                                opacity="0.45"
+                                className="text-[10px]"
+                              >
+                                {Math.round(r * maxV)}
+                              </text>
+                            </g>
+                          )
+                        })}
+
+                        <path d={areaPath} fill={`url(#grad-${widget.id})`} />
+                        <path
+                          d={benchPath}
+                          fill="none"
+                          stroke="#94a3b8"
+                          strokeWidth="2"
+                          strokeDasharray="5 5"
+                        />
+                        <path
+                          d={actPath}
+                          fill="none"
+                          stroke="#3b82f6"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                        />
+
+                        {pts.map((pt, idx) => {
+                          const isHov = activeHoverIdx === idx
+                          return (
+                            <g
+                              key={idx}
+                              className="cursor-pointer"
+                              onMouseEnter={() =>
+                                setHoveredWidgetPoint({ widgetId: widget.id, index: idx })
+                              }
+                              onMouseLeave={() => setHoveredWidgetPoint(null)}
+                            >
+                              <rect
+                                x={pt.x - 24}
+                                y={padY}
+                                width={48}
+                                height={h - padY * 2}
+                                fill="transparent"
+                              />
+                              {isHov && (
+                                <line
+                                  x1={pt.x}
+                                  y1={padY}
+                                  x2={pt.x}
+                                  y2={h - padY}
+                                  stroke="#3b82f6"
+                                  strokeOpacity="0.4"
+                                  strokeWidth="1.5"
+                                />
+                              )}
+                              <circle
+                                cx={pt.x}
+                                cy={pt.yBench}
+                                r={isHov ? 5 : 3.5}
+                                fill="#0f172a"
+                                stroke="#94a3b8"
+                                strokeWidth="2"
+                              />
+                              <circle
+                                cx={pt.x}
+                                cy={pt.yAct}
+                                r={isHov ? 6.5 : 4.5}
+                                fill="#3b82f6"
+                                stroke="#ffffff"
+                                strokeWidth="2"
+                              />
+                              <text
+                                x={pt.x}
+                                y={h - 6}
+                                textAnchor="middle"
+                                fill="currentColor"
+                                opacity={isHov ? 1 : 0.6}
+                                className="text-[11px] font-medium"
+                              >
+                                {pt.label}
+                              </text>
+                            </g>
+                          )
+                        })}
+                      </svg>
+
+                      {hoveredPt && (
+                        <div
+                          className="pointer-events-none absolute top-3 z-20 min-w-[165px] -translate-x-1/2 rounded-xl border border-border bg-slate-950/95 p-3 shadow-2xl backdrop-blur-md"
+                          style={{ left: `${(hoveredPt.x / w) * 100}%` }}
+                        >
+                          <p className="mb-1.5 text-end text-xs font-bold text-foreground">
+                            {hoveredPt.label}
+                          </p>
+                          <div className="space-y-1 text-xs">
+                            <div className="flex items-center justify-between gap-4">
+                              <span className="font-bold text-slate-300">
+                                {hoveredPt.benchmark.toLocaleString(lang)}
+                              </span>
+                              <span className="flex items-center gap-1.5 text-muted-foreground">
+                                {L.baselineTooltip}{' '}
+                                <span className="h-2 w-2 rounded-full bg-slate-400" />
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-4">
+                              <span className="font-bold text-primary">
+                                {hoveredPt.actual.toLocaleString(lang)}
+                              </span>
+                              <span className="flex items-center gap-1.5 text-muted-foreground">
+                                {L.actualTooltip}{' '}
+                                <span className="h-2 w-2 rounded-full bg-primary" />
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              }
+
+              if (widget.chartType === 'donut_share') {
+                const r = 38
+                const c = 2 * Math.PI * r
+                const p1 = (widget.percentage / 100) * c
+                const remPct = 100 - widget.percentage
+                const p2 = (remPct / 100) * c
+
+                const activeHoverIdx =
+                  hoveredWidgetPoint?.widgetId === widget.id ? hoveredWidgetPoint.index : null
+
+                return (
+                  <div
+                    key={widget.id}
+                    className={`flex flex-col justify-between rounded-2xl border border-border bg-card/50 p-6 ${
+                      widgetIdx === 1 ? 'lg:col-span-4' : 'lg:col-span-6'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <PieChart className="h-5 w-5 text-primary" />
+                      <div className="text-end">
+                        <h3 className="text-base font-bold">{widget.title}</h3>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{widget.subtitle}</p>
+                      </div>
+                    </div>
+
+                    <div className="my-5 flex items-center justify-between gap-4">
+                      <div className="flex-1 space-y-3">
+                        <div
+                          onMouseEnter={() =>
+                            setHoveredWidgetPoint({ widgetId: widget.id, index: 0 })
+                          }
+                          onMouseLeave={() => setHoveredWidgetPoint(null)}
+                          className={`flex cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors ${
+                            activeHoverIdx === 0 ? 'bg-secondary' : ''
+                          }`}
+                        >
+                          <span className="font-bold text-foreground">{widget.percentage}%</span>
+                          <span className="flex items-center gap-2 text-muted-foreground">
+                            <span className="max-w-[95px] truncate">{widget.primaryLabel}</span>
+                            <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+                          </span>
+                        </div>
+
+                        <div
+                          onMouseEnter={() =>
+                            setHoveredWidgetPoint({ widgetId: widget.id, index: 1 })
+                          }
+                          onMouseLeave={() => setHoveredWidgetPoint(null)}
+                          className={`flex cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors ${
+                            activeHoverIdx === 1 ? 'bg-secondary' : ''
+                          }`}
+                        >
+                          <span className="font-bold text-foreground">{remPct}%</span>
+                          <span className="flex items-center gap-2 text-muted-foreground">
+                            <span>{L.otherCategories}</span>
+                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                          </span>
                         </div>
                       </div>
 
-                      <div className="my-5 flex items-center justify-between gap-4">
-                        <div className="flex-1 space-y-3">
-                          <div
+                      <div className="relative flex h-36 w-36 shrink-0 items-center justify-center">
+                        <svg className="h-full w-full -rotate-90" viewBox="0 0 100 100">
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r={r}
+                            fill="transparent"
+                            stroke="#3b82f6"
+                            strokeWidth={activeHoverIdx === 0 ? '14' : '11'}
+                            strokeDasharray={`${p1} ${c}`}
+                            strokeDashoffset="0"
+                            className="cursor-pointer transition-all"
                             onMouseEnter={() =>
                               setHoveredWidgetPoint({ widgetId: widget.id, index: 0 })
                             }
                             onMouseLeave={() => setHoveredWidgetPoint(null)}
-                            className={`flex cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors ${
-                              activeHoverIdx === 0 ? 'bg-secondary' : ''
-                            }`}
-                          >
-                            <span className="font-bold text-foreground">{widget.percentage}%</span>
-                            <span className="flex items-center gap-2 text-muted-foreground">
-                              <span className="max-w-[95px] truncate">{widget.primaryLabel}</span>
-                              <span className="h-2.5 w-2.5 rounded-full bg-primary" />
-                            </span>
-                          </div>
-
-                          <div
-                            onMouseEnter={() =>
-                              setHoveredWidgetPoint({ widgetId: widget.id, index: 1 })
-                            }
-                            onMouseLeave={() => setHoveredWidgetPoint(null)}
-                            className={`flex cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors ${
-                              activeHoverIdx === 1 ? 'bg-secondary' : ''
-                            }`}
-                          >
-                            <span className="font-bold text-foreground">{remPct}%</span>
-                            <span className="flex items-center gap-2 text-muted-foreground">
-                              <span>{L.otherCategories}</span>
-                              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="relative flex h-36 w-36 shrink-0 items-center justify-center">
-                          <svg className="h-full w-full -rotate-90" viewBox="0 0 100 100">
+                          />
+                          {remPct > 0 && (
                             <circle
                               cx="50"
                               cy="50"
                               r={r}
                               fill="transparent"
-                              stroke="#3b82f6"
-                              strokeWidth={activeHoverIdx === 0 ? '14' : '11'}
-                              strokeDasharray={`${p1} ${c}`}
-                              strokeDashoffset="0"
+                              stroke="#10b981"
+                              strokeWidth={activeHoverIdx === 1 ? '14' : '11'}
+                              strokeDasharray={`${p2} ${c}`}
+                              strokeDashoffset={-p1}
                               className="cursor-pointer transition-all"
                               onMouseEnter={() =>
-                                setHoveredWidgetPoint({ widgetId: widget.id, index: 0 })
+                                setHoveredWidgetPoint({ widgetId: widget.id, index: 1 })
                               }
                               onMouseLeave={() => setHoveredWidgetPoint(null)}
                             />
-                            {remPct > 0 && (
-                              <circle
-                                cx="50"
-                                cy="50"
-                                r={r}
-                                fill="transparent"
-                                stroke="#10b981"
-                                strokeWidth={activeHoverIdx === 1 ? '14' : '11'}
-                                strokeDasharray={`${p2} ${c}`}
-                                strokeDashoffset={-p1}
-                                className="cursor-pointer transition-all"
-                                onMouseEnter={() =>
-                                  setHoveredWidgetPoint({ widgetId: widget.id, index: 1 })
-                                }
-                                onMouseLeave={() => setHoveredWidgetPoint(null)}
-                              />
-                            )}
-                          </svg>
-                          <div className="pointer-events-none absolute flex flex-col items-center text-center">
-                            <span className="text-base font-bold">
-                              {activeHoverIdx === 1
-                                ? widget.secondaryCount.toLocaleString(lang)
-                                : widget.primaryCount.toLocaleString(lang)}
-                            </span>
-                            <span className="text-[10px] text-muted-foreground">
-                              {L.recordsUnit}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="rounded-xl border border-border/60 bg-background/50 px-3 py-2 text-center text-xs text-muted-foreground">
-                        {activeHoverIdx === 1 ? (
-                          <span>
-                            {L.otherCategories}:{' '}
-                            <strong className="text-emerald-400">
-                              {widget.secondaryCount.toLocaleString(lang)} {L.recordsUnit}
-                            </strong>{' '}
-                            ({remPct}%)
-                          </span>
-                        ) : (
-                          <span>
-                            {L.segmentLabel}{' '}
-                            <strong className="text-foreground">{widget.primaryLabel}</strong>:{' '}
-                            <strong className="text-primary">
-                              {widget.primaryCount.toLocaleString(lang)} {L.recordsUnit}
-                            </strong>{' '}
-                            ({widget.percentage}%)
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )
-                }
-
-                if (widget.chartType === 'comparison_bar') {
-                  const maxBar = Math.max(...widget.items.map((i) => i.value), 1)
-                  const activeHoverIdx =
-                    hoveredWidgetPoint?.widgetId === widget.id ? hoveredWidgetPoint.index : null
-
-                  return (
-                    <div
-                      key={widget.id}
-                      className="rounded-2xl border border-border bg-card/50 p-6 lg:col-span-6"
-                    >
-                      <div className="mb-4 flex items-start justify-between">
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                            widget.isNegative
-                              ? 'bg-red-500/15 text-red-400'
-                              : 'bg-emerald-500/15 text-emerald-400'
-                          }`}
-                        >
-                          {widget.isNegative ? (
-                            <TrendingDown className="h-3.5 w-3.5" />
-                          ) : (
-                            <TrendingUp className="h-3.5 w-3.5" />
                           )}
-                          {widget.changePct}
-                        </span>
-                        <div className="text-end">
-                          <div className="flex items-center justify-end gap-2">
-                            <h3 className="text-base font-bold">{widget.title}</h3>
-                            <BarChart3 className="h-4 w-4 text-primary" />
-                          </div>
-                          <p className="mt-0.5 text-xs text-muted-foreground">{widget.subtitle}</p>
+                        </svg>
+                        <div className="pointer-events-none absolute flex flex-col items-center text-center">
+                          <span className="text-base font-bold">
+                            {activeHoverIdx === 1
+                              ? widget.secondaryCount.toLocaleString(lang)
+                              : widget.primaryCount.toLocaleString(lang)}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {L.recordsUnit}
+                          </span>
                         </div>
-                      </div>
-
-                      <div className="flex h-52 items-end justify-around gap-6 rounded-xl border border-border/50 bg-background/40 px-8 pt-8 pb-4">
-                        {widget.items.map((bar, idx) => {
-                          const heightPct = Math.max(18, Math.round((bar.value / maxBar) * 100))
-                          const isHov = activeHoverIdx === idx
-                          return (
-                            <div
-                              key={idx}
-                              onMouseEnter={() =>
-                                setHoveredWidgetPoint({ widgetId: widget.id, index: idx })
-                              }
-                              onMouseLeave={() => setHoveredWidgetPoint(null)}
-                              className="flex h-full flex-1 cursor-pointer flex-col items-center justify-end gap-2"
-                            >
-                              <span
-                                className={`rounded-md px-2 py-0.5 text-xs font-bold transition-all ${
-                                  isHov
-                                    ? 'bg-primary text-primary-foreground shadow'
-                                    : 'text-foreground'
-                                }`}
-                              >
-                                {bar.value.toLocaleString(lang)}
-                              </span>
-                              <div className="flex w-full max-w-[64px] flex-1 items-end">
-                                <div
-                                  className={`w-full rounded-t-xl transition-all duration-300 ${
-                                    idx === 0
-                                      ? 'bg-gradient-to-t from-primary/60 to-primary'
-                                      : 'bg-gradient-to-t from-cyan-500/60 to-cyan-400'
-                                  } ${isHov ? 'brightness-125' : ''}`}
-                                  style={{ height: `${heightPct}%` }}
-                                />
-                              </div>
-                              <span className="max-w-[95px] truncate text-xs font-medium text-muted-foreground">
-                                {bar.label}
-                              </span>
-                            </div>
-                          )
-                        })}
                       </div>
                     </div>
-                  )
-                }
 
-                if (widget.chartType === 'metric_distribution') {
-                  return (
-                    <div
-                      key={widget.id}
-                      className="flex flex-col justify-between rounded-2xl border border-border bg-card/50 p-6 lg:col-span-6"
-                    >
-                      <div className="mb-4 flex items-start justify-between">
-                        <Activity className="h-5 w-5 text-cyan-400" />
-                        <div className="text-end">
+                    <div className="rounded-xl border border-border/60 bg-background/50 px-3 py-2 text-center text-xs text-muted-foreground">
+                      {activeHoverIdx === 1 ? (
+                        <span>
+                          {L.otherCategories}:{' '}
+                          <strong className="text-emerald-400">
+                            {widget.secondaryCount.toLocaleString(lang)} {L.recordsUnit}
+                          </strong>{' '}
+                          ({remPct}%)
+                        </span>
+                      ) : (
+                        <span>
+                          {L.segmentLabel}{' '}
+                          <strong className="text-foreground">{widget.primaryLabel}</strong>:{' '}
+                          <strong className="text-primary">
+                            {widget.primaryCount.toLocaleString(lang)} {L.recordsUnit}
+                          </strong>{' '}
+                          ({widget.percentage}%)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              }
+
+              if (widget.chartType === 'comparison_bar') {
+                const maxBar = Math.max(...widget.items.map((i) => i.value), 1)
+                const activeHoverIdx =
+                  hoveredWidgetPoint?.widgetId === widget.id ? hoveredWidgetPoint.index : null
+
+                return (
+                  <div
+                    key={widget.id}
+                    className="rounded-2xl border border-border bg-card/50 p-6 lg:col-span-6"
+                  >
+                    <div className="mb-4 flex items-start justify-between">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          widget.isNegative
+                            ? 'bg-red-500/15 text-red-400'
+                            : 'bg-emerald-500/15 text-emerald-400'
+                        }`}
+                      >
+                        {widget.isNegative ? (
+                          <TrendingDown className="h-3.5 w-3.5" />
+                        ) : (
+                          <TrendingUp className="h-3.5 w-3.5" />
+                        )}
+                        {widget.changePct}
+                      </span>
+                      <div className="text-end">
+                        <div className="flex items-center justify-end gap-2">
                           <h3 className="text-base font-bold">{widget.title}</h3>
-                          <p className="mt-0.5 text-xs text-muted-foreground">{widget.subtitle}</p>
+                          <BarChart3 className="h-4 w-4 text-primary" />
                         </div>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{widget.subtitle}</p>
                       </div>
+                    </div>
 
-                      <div className="space-y-4 rounded-xl border border-border/50 bg-background/40 p-4">
-                        {widget.metrics.map((m, i) => (
-                          <div key={i}>
-                            <div className="mb-1.5 flex items-center justify-between text-xs">
-                              <span
-                                className={`font-bold ${
-                                  m.isNegative ? 'text-red-400' : 'text-primary'
-                                }`}
-                              >
-                                {m.value.toLocaleString(lang)}
-                              </span>
-                              <span className="font-medium text-muted-foreground">{m.label}</span>
-                            </div>
-                            <div className="h-2.5 w-full overflow-hidden rounded-full bg-secondary">
+                    <div className="flex h-52 items-end justify-around gap-6 rounded-xl border border-border/50 bg-background/40 px-8 pt-8 pb-4">
+                      {widget.items.map((bar, idx) => {
+                        const heightPct = Math.max(18, Math.round((bar.value / maxBar) * 100))
+                        const isHov = activeHoverIdx === idx
+                        return (
+                          <div
+                            key={idx}
+                            onMouseEnter={() =>
+                              setHoveredWidgetPoint({ widgetId: widget.id, index: idx })
+                            }
+                            onMouseLeave={() => setHoveredWidgetPoint(null)}
+                            className="flex h-full flex-1 cursor-pointer flex-col items-center justify-end gap-2"
+                          >
+                            <span
+                              className={`rounded-md px-2 py-0.5 text-xs font-bold transition-all ${
+                                isHov
+                                  ? 'bg-primary text-primary-foreground shadow'
+                                  : 'text-foreground'
+                              }`}
+                            >
+                              {bar.value.toLocaleString(lang)}
+                            </span>
+                            <div className="flex w-full max-w-[64px] flex-1 items-end">
                               <div
-                                className={`h-full rounded-full transition-all duration-500 ${
-                                  m.isNegative
-                                    ? 'bg-gradient-to-r from-red-500/70 to-red-400'
-                                    : 'bg-gradient-to-r from-primary to-cyan-400'
-                                }`}
-                                style={{ width: `${m.pct}%` }}
+                                className={`w-full rounded-t-xl transition-all duration-300 ${
+                                  idx === 0
+                                    ? 'bg-gradient-to-t from-primary/60 to-primary'
+                                    : 'bg-gradient-to-t from-cyan-500/60 to-cyan-400'
+                                } ${isHov ? 'brightness-125' : ''}`}
+                                style={{ height: `${heightPct}%` }}
                               />
                             </div>
+                            <span className="max-w-[95px] truncate text-xs font-medium text-muted-foreground">
+                              {bar.label}
+                            </span>
                           </div>
-                        ))}
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              }
+
+              if (widget.chartType === 'metric_distribution') {
+                return (
+                  <div
+                    key={widget.id}
+                    className="flex flex-col justify-between rounded-2xl border border-border bg-card/50 p-6 lg:col-span-6"
+                  >
+                    <div className="mb-4 flex items-start justify-between">
+                      <Activity className="h-5 w-5 text-cyan-400" />
+                      <div className="text-end">
+                        <h3 className="text-base font-bold">{widget.title}</h3>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{widget.subtitle}</p>
                       </div>
                     </div>
-                  )
-                }
 
-                return null
-              })}
-            </div>
-
-            {/* Detailed Findings & Actionable Recommendations (0ms instant localization) */}
-            {insights.length > 0 && (
-              <div className="rounded-2xl border border-border bg-card/50 p-6">
-                <div className="mb-4 flex items-center gap-2 text-sm font-bold text-foreground">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  <span>
-                    {L.insightsSectionTitle} ({insights.length})
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {insights.map((ins, iIdx) => {
-                    const parts = ins.description.split(
-                      /التوصية:|Recommendation:|Empfehlung:|Recomendación:|Raccomandazione:|Recommandation:|Рекомендация:|Öneri:/i
-                    )
-                    const findingText = parts[0]?.trim()
-                    const recommendationText = parts[1]?.trim()
-
-                    return (
-                      <div
-                        key={iIdx}
-                        className="flex flex-col justify-between rounded-xl border border-border/80 bg-background/60 p-4 transition-colors hover:border-primary/40"
-                      >
-                        <div>
-                          <h3 className="text-sm font-bold text-foreground">{ins.title}</h3>
-                          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                            {findingText}
-                          </p>
-                        </div>
-
-                        {recommendationText && (
-                          <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-2.5 text-xs text-amber-200">
-                            <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-                            <div>
-                              <span className="font-bold text-amber-300">
-                                {L.recommendationLabel}:{' '}
-                              </span>
-                              <span>{recommendationText}</span>
-                            </div>
+                    <div className="space-y-4 rounded-xl border border-border/50 bg-background/40 p-4">
+                      {widget.metrics.map((m, i) => (
+                        <div key={i}>
+                          <div className="mb-1.5 flex items-center justify-between text-xs">
+                            <span
+                              className={`font-bold ${
+                                m.isNegative ? 'text-red-400' : 'text-primary'
+                              }`}
+                            >
+                              {m.value.toLocaleString(lang)}
+                            </span>
+                            <span className="font-medium text-muted-foreground">{m.label}</span>
                           </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-          </>
+                          <div className="h-2.5 w-full overflow-hidden rounded-full bg-secondary">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                m.isNegative
+                                  ? 'bg-gradient-to-r from-red-500/70 to-red-400'
+                                  : 'bg-gradient-to-r from-primary to-cyan-400'
+                              }`}
+                              style={{ width: `${m.pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              }
+
+              return null
+            })}
+          </div>
         ) : (
           <div className="rounded-2xl border border-border bg-card/40 p-8 text-center">
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary">

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, Suspense, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
 import { apiRequest, getSession } from '@/lib/api'
@@ -33,6 +33,66 @@ type ProjectReportItem = {
   insights: Array<{ title: string; description: string; severity?: string }>
 }
 
+function readCachedReportsFromStorage(): {
+  cachedProjects: Array<{ id: string; name: string }>
+  cachedReports: ProjectReportItem[]
+} {
+  if (typeof window === 'undefined') {
+    return { cachedProjects: [], cachedReports: [] }
+  }
+
+  const projMap = new Map<string, { id: string; name: string }>()
+  const repMap = new Map<string, ProjectReportItem>()
+
+  try {
+    const savedNames: Record<string, string> = JSON.parse(
+      localStorage.getItem('insightflow_project_names') || '{}'
+    )
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (!k || !k.startsWith('insightflow_project_files_')) continue
+
+      const pid = k.replace('insightflow_project_files_', '')
+      if (!pid) continue
+
+      const pName = savedNames[pid] || 'Project'
+      projMap.set(pid, { id: pid, name: pName })
+
+      const cachedFiles = JSON.parse(localStorage.getItem(k) || '[]')
+      if (!Array.isArray(cachedFiles)) continue
+
+      for (const ds of cachedFiles) {
+        const fname = ds.fileName || ds.originalFileName || ds.name || 'Dataset'
+        const dsId = ds.datasetId || ds.id || fname
+        const insList = Array.isArray(ds.insights) ? ds.insights : []
+
+        repMap.set(`${pid}::${fname}`, {
+          projectId: pid,
+          projectName: pName,
+          datasetId: dsId,
+          fileName: fname,
+          rowCount: ds.rowCount ?? 0,
+          columnCount: ds.columnCount ?? 0,
+          uploadedAt: ds.uploadedAt || new Date().toISOString(),
+          insights: insList,
+        })
+      }
+    }
+  } catch {
+    // ignore storage read errors
+  }
+
+  const cachedReports = Array.from(repMap.values()).sort(
+    (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
+  )
+
+  return {
+    cachedProjects: Array.from(projMap.values()),
+    cachedReports,
+  }
+}
+
 function ReportsContent() {
   const searchParams = useSearchParams()
   const initialProjectId = searchParams?.get('projectId') || 'all'
@@ -45,15 +105,28 @@ function ReportsContent() {
   const [loading, setLoading] = useState(true)
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null)
   const [tokenDict, setTokenDict] = useState<Record<string, string>>({})
+  const hasHydratedRef = useRef(false)
 
   const currentLangObj =
     SUPPORTED_LANGUAGES.find((l) => l.code === lang) || SUPPORTED_LANGUAGES[0]
 
+  // 1) عرض فوري (0ms) من الكاش المحلي قبل انتظار السيرفر
+  useEffect(() => {
+    const { cachedProjects, cachedReports } = readCachedReportsFromStorage()
+    if (cachedProjects.length > 0) setProjects(cachedProjects)
+    if (cachedReports.length > 0) {
+      setReports(cachedReports)
+      setLoading(false)
+    }
+  }, [])
+
+  // 2) تحديث البيانات من الباك إند مرة واحدة فقط (غير مرتبط بتغيير اللغة)
   useEffect(() => {
     if (roleLoading) return
+    if (hasHydratedRef.current) return
+    hasHydratedRef.current = true
 
     async function loadAllProjectReports() {
-      setLoading(true)
       try {
         const session = getSession()
         const wsIds = new Set<string>()
@@ -64,33 +137,42 @@ function ReportsContent() {
         if (Array.isArray(wsList)) {
           wsList.forEach((w) => {
             const id = w?.id || w?.workspaceId
-            if (id) wsIds.add(id)
+            if (id && id !== 'default') wsIds.add(id)
           })
         }
 
         const projectMap = new Map<string, { id: string; name: string }>()
-        for (const wsId of wsIds) {
-          const rawProjects = await apiRequest<any[]>(`/api/workspaces/${wsId}/projects`).catch(
-            () => []
+        const projectNamesCache: Record<string, string> = {}
+
+        // جلب مشاريع كل مساحات العمل بالتوازي
+        const workspaceProjectsArrays = await Promise.all(
+          Array.from(wsIds).map((wsId) =>
+            apiRequest<any[]>(`/api/workspaces/${wsId}/projects`).catch(() => [])
           )
+        )
+
+        workspaceProjectsArrays.forEach((rawProjects) => {
           if (Array.isArray(rawProjects)) {
             rawProjects.forEach((p) => {
               const pid = p.id || p.projectId
+              const pname = p.name || 'Project'
               if (pid) {
-                projectMap.set(pid, { id: pid, name: p.name || 'Project' })
+                projectMap.set(pid, { id: pid, name: pname })
+                projectNamesCache[pid] = pname
               }
             })
           }
-        }
+        })
 
-        // أيضاً التقاط أي مشاريع مخزنة محلياً في المتصفح
+        // التقاط أي مشاريع مخزنة محلياً
         if (typeof window !== 'undefined') {
+          localStorage.setItem('insightflow_project_names', JSON.stringify(projectNamesCache))
           for (let i = 0; i < localStorage.length; i++) {
             const k = localStorage.key(i)
             if (k && k.startsWith('insightflow_project_files_')) {
               const pid = k.replace('insightflow_project_files_', '')
               if (pid && !projectMap.has(pid)) {
-                projectMap.set(pid, { id: pid, name: 'Project' })
+                projectMap.set(pid, { id: pid, name: projectNamesCache[pid] || 'Project' })
               }
             }
           }
@@ -101,84 +183,101 @@ function ReportsContent() {
 
         const uniqueReportsMap = new Map<string, ProjectReportItem>()
 
-        for (const proj of projList) {
-          const key = `insightflow_project_files_${proj.id}`
-          const cached = JSON.parse(localStorage.getItem(key) || '[]')
-          const remoteFiles = await apiRequest<any[]>(`/api/projects/${proj.id}/files`).catch(
-            () => []
-          )
+        // جلب ملفات كل المشاريع بالتوازي لتسريع الفتح
+        await Promise.all(
+          projList.map(async (proj) => {
+            const key = `insightflow_project_files_${proj.id}`
+            const cached = JSON.parse(localStorage.getItem(key) || '[]')
+            const remoteFiles = await apiRequest<any[]>(`/api/projects/${proj.id}/files`).catch(
+              () => []
+            )
 
-          const cachedMap = new Map<string, any>(
-            Array.isArray(cached)
-              ? cached.flatMap((c: any) => [
-                  [c.id, c],
-                  [c.name, c],
-                ])
-              : []
-          )
+            const cachedMap = new Map<string, any>(
+              Array.isArray(cached)
+                ? cached.flatMap((c: any) => [
+                    [c.id, c],
+                    [c.fileId, c],
+                    [c.name, c],
+                  ])
+                : []
+            )
 
-          const filesSource =
-            Array.isArray(remoteFiles) && remoteFiles.length > 0 ? remoteFiles : cached
+            const filesSource =
+              Array.isArray(remoteFiles) && remoteFiles.length > 0 ? remoteFiles : cached
 
-          if (Array.isArray(filesSource)) {
-            for (const ds of filesSource) {
-              const dsId = ds.datasetId || ds.id
-              const fname = ds.fileName || ds.originalFileName || ds.name || 'Dataset'
-              const localMatch = cachedMap.get(dsId) || cachedMap.get(fname)
-              const rows = ds.rowCount ?? localMatch?.rowCount ?? 0
-              const cols = ds.columnCount ?? localMatch?.columnCount ?? 0
+            if (!Array.isArray(filesSource) || filesSource.length === 0) return
 
-              let insList: Array<{ title: string; description: string }> =
-                Array.isArray(localMatch?.insights) && localMatch.insights.length > 0
-                  ? localMatch.insights
-                  : []
+            const updatedLocalItems: any[] = []
 
-              if (insList.length === 0 && dsId) {
-                const insRes = await apiRequest<any>(
-                  `/api/analytics/datasets/${dsId}/insights`,
-                  {
-                    method: 'POST',
-                    body: JSON.stringify({
-                      metrics: [],
-                      groupBy: [],
-                      filters: [],
-                      comparisons: [],
-                    }),
+            await Promise.all(
+              filesSource.map(async (ds: any) => {
+                const dsId = ds.datasetId || ds.id
+                const fname = ds.fileName || ds.originalFileName || ds.name || 'Dataset'
+                const localMatch = cachedMap.get(dsId) || cachedMap.get(fname)
+                const rows = ds.rowCount ?? localMatch?.rowCount ?? 0
+                const cols = ds.columnCount ?? localMatch?.columnCount ?? 0
+
+                let insList: Array<{ title: string; description: string }> =
+                  Array.isArray(localMatch?.insights) && localMatch.insights.length > 0
+                    ? localMatch.insights
+                    : []
+
+                if (insList.length === 0 && dsId) {
+                  const insRes = await apiRequest<any>(
+                    `/api/analytics/datasets/${dsId}/insights`,
+                    {
+                      method: 'POST',
+                      body: JSON.stringify({
+                        metrics: [],
+                        groupBy: [],
+                        filters: [],
+                        comparisons: [],
+                      }),
+                    }
+                  ).catch(() => null)
+
+                  const rawIns = insRes?.insights || insRes?.Insights || []
+                  if (Array.isArray(rawIns) && rawIns.length > 0) {
+                    insList = rawIns.map((item: any) => ({
+                      title: item.title || item.Title || 'Metric',
+                      description: item.description || item.Description || item.message || '',
+                    }))
                   }
-                ).catch(() => null)
-
-                const rawIns = insRes?.insights || insRes?.Insights || []
-                if (Array.isArray(rawIns) && rawIns.length > 0) {
-                  insList = rawIns.map((item: any) => ({
-                    title: item.title || item.Title || 'Metric',
-                    description: item.description || item.Description || item.message || '',
-                  }))
                 }
-              }
 
-              if (insList.length === 0 && (rows > 0 || cols > 0)) {
-                insList = [
-                  {
-                    title: `${t.reportDatasetLabel}: ${fname}`,
-                    description: `${rows.toLocaleString(lang)} ${t.recordsLabel} & ${cols} ${t.dimensionsAnalyzed}.`,
-                  },
-                ]
-              }
+                const uploadedAt =
+                  ds.uploadedAt || localMatch?.uploadedAt || new Date().toISOString()
 
-              const dedupKey = `${proj.id}::${fname}`
-              uniqueReportsMap.set(dedupKey, {
-                projectId: proj.id,
-                projectName: proj.name,
-                datasetId: dsId,
-                fileName: fname,
-                rowCount: rows,
-                columnCount: cols,
-                uploadedAt: ds.uploadedAt || localMatch?.uploadedAt || new Date().toISOString(),
-                insights: insList,
+                updatedLocalItems.push({
+                  ...(localMatch || {}),
+                  id: dsId,
+                  fileId: ds.fileId || ds.id,
+                  name: fname,
+                  rowCount: rows,
+                  columnCount: cols,
+                  insights: insList,
+                  uploadedAt,
+                })
+
+                const dedupKey = `${proj.id}::${fname}`
+                uniqueReportsMap.set(dedupKey, {
+                  projectId: proj.id,
+                  projectName: proj.name,
+                  datasetId: dsId,
+                  fileName: fname,
+                  rowCount: rows,
+                  columnCount: cols,
+                  uploadedAt,
+                  insights: insList,
+                })
               })
+            )
+
+            if (updatedLocalItems.length > 0) {
+              localStorage.setItem(key, JSON.stringify(updatedLocalItems))
             }
-          }
-        }
+          })
+        )
 
         const collected = Array.from(uniqueReportsMap.values())
         collected.sort(
@@ -193,34 +292,37 @@ function ReportsContent() {
     }
 
     loadAllProjectReports()
-  }, [activeWorkspaceId, roleLoading, lang, t.dimensionsAnalyzed, t.recordsLabel, t.reportDatasetLabel])
+  }, [activeWorkspaceId, roleLoading])
 
+  // 3) ترجمة المصطلحات الديناميكية في 0ms من الكاش دون إظهار أي شاشة تحميل
   useEffect(() => {
     if (lang === 'ar' || reports.length === 0) {
       setTokenDict({})
       return
     }
 
-    const allTokens = new Set<string>()
-    reports.forEach((r) => extractArabicTokens(r.insights).forEach((tk) => allTokens.add(tk)))
-    const tokensArr = Array.from(allTokens)
-    if (tokensArr.length === 0) return
-
     const cacheKey = `insightflow_all_tokens_${lang}`
+    let cachedDict: Record<string, string> = {}
     try {
-      const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null')
-      if (cached && typeof cached === 'object') {
-        setTokenDict(cached)
+      const parsed = JSON.parse(localStorage.getItem(cacheKey) || 'null')
+      if (parsed && typeof parsed === 'object') {
+        cachedDict = parsed
+        setTokenDict(parsed)
       }
     } catch {
       // ignore
     }
 
+    const allTokens = new Set<string>()
+    reports.forEach((r) => extractArabicTokens(r.insights).forEach((tk) => allTokens.add(tk)))
+    const missingTokens = Array.from(allTokens).filter((tk) => !cachedDict[tk])
+    if (missingTokens.length === 0) return
+
     fetch('/api/copilot/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: `Translate each short Arabic word/phrase in this array into language "${lang}". Return ONLY a valid JSON object {"original": "translation"}:\n${JSON.stringify(tokensArr)}`,
+        message: `Translate each short Arabic word/phrase in this array into language "${lang}". Return ONLY a valid JSON object {"original": "translation"}:\n${JSON.stringify(missingTokens)}`,
       }),
     })
       .then((r) => r.json())
@@ -331,7 +433,7 @@ ${rawFindings}`,
       ? reports
       : reports.filter((r) => r.projectId === selectedProjectFilter)
 
-  if (loading || roleLoading) {
+  if (loading && reports.length === 0) {
     return (
       <div className="flex h-96 items-center justify-center">
         <p className="animate-pulse text-sm text-muted-foreground">{t.loadingAiReports}</p>
@@ -382,7 +484,15 @@ ${rawFindings}`,
           {filteredReports.map((rep) => {
             const itemKey = `${rep.projectId}-${rep.fileName}`
             const isDownloading = downloadingKey === itemKey
-            const displayedInsights = formatLocalizedInsights(rep.insights, lang, tokenDict)
+            const displayedInsights =
+              rep.insights.length > 0
+                ? formatLocalizedInsights(rep.insights, lang, tokenDict)
+                : [
+                    {
+                      title: `${t.reportDatasetLabel}: ${rep.fileName}`,
+                      description: `${rep.rowCount.toLocaleString(lang)} ${t.recordsLabel} & ${rep.columnCount} ${t.dimensionsAnalyzed}.`,
+                    },
+                  ]
 
             return (
               <div
@@ -410,10 +520,10 @@ ${rawFindings}`,
                           <CheckCircle2 className="h-3.5 w-3.5" /> {t.analysisCompleted}
                         </span>
                         <span>
-                          - {rep.rowCount.toLocaleString(lang)} {t.recordsLabel}
+                          • {rep.rowCount.toLocaleString(lang)} {t.recordsLabel}
                         </span>
                         <span>
-                          - {rep.columnCount} {t.dimensionsAnalyzed}
+                          • {rep.columnCount} {t.dimensionsAnalyzed}
                         </span>
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />{' '}
