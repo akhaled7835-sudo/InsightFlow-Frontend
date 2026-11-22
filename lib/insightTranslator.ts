@@ -29,6 +29,26 @@ const INSIGHT_TEMPLATES: Record<
       lowVal: string
     ) => string
     varianceRec: (topCat: string) => string
+    outlierTitle: (col: string) => string
+    outlierDesc: (
+      col: string,
+      minVal: string,
+      maxVal: string,
+      avgVal: string,
+      mult: string
+    ) => string
+    outlierRec: string
+    comparisonTitle: (m1: string, m2: string) => string
+    comparisonDesc: (
+      isDrop: boolean,
+      v1: string,
+      m1: string,
+      v2: string,
+      m2: string,
+      pct: string
+    ) => string
+    comparisonRecDrop: string
+    comparisonRecRise: string
   }
 > = {
   en: {
@@ -47,6 +67,18 @@ const INSIGHT_TEMPLATES: Record<
       `Category '${topCat}' leads with ${metric} of ${topVal}, outperforming '${lowCat}' (${lowVal}) by ${pctDiff}%.`,
     varianceRec: (topCat) =>
       `Recommendation: Study the outperformance drivers of '${topCat}' and replicate best practices to elevate lower-performing segments.`,
+    outlierTitle: (col) => `Sharp Spread & High Outliers in (${col})`,
+    outlierDesc: (col, minVal, maxVal, avgVal, mult) =>
+      `'${col}' ranges between ${minVal} and ${maxVal} with an average of ${avgVal} (maximum value equals ${mult}x the average).`,
+    outlierRec:
+      'Recommendation: Review records with extreme values to verify whether they are genuine exceptions or data entry errors, and use the Median alongside the Average.',
+    comparisonTitle: (m1, m2) => `Performance Comparison between (${m1}) and (${m2})`,
+    comparisonDesc: (isDrop, v1, m1, v2, m2, pct) =>
+      `The average ${isDrop ? 'decreased' : 'increased'} from ${v1} in '${m1}' to ${v2} in '${m2}', a ${isDrop ? 'decline' : 'growth'} of ${pct}%.`,
+    comparisonRecDrop:
+      'Recommendation: Analyze the root causes of decline in underperforming segments and implement an immediate corrective action plan.',
+    comparisonRecRise:
+      'Recommendation: Capitalize on this positive momentum and scale the drivers behind the improvement across other segments.',
   },
   de: {
     completenessTitle: (pct) => `${pct}% Datenvollständigkeit`,
@@ -64,6 +96,18 @@ const INSIGHT_TEMPLATES: Record<
       `Die Kategorie '${topCat}' führt mit ${metric} von ${topVal} und übertrifft '${lowCat}' (${lowVal}) um ${pctDiff}%.`,
     varianceRec: (topCat) =>
       `Empfehlung: Analysieren Sie die Erfolgsfaktoren von '${topCat}' und übertragen Sie Best Practices auf schwächere Segmente.`,
+    outlierTitle: (col) => `Starke Streuung & hohe Ausreißer bei (${col})`,
+    outlierDesc: (col, minVal, maxVal, avgVal, mult) =>
+      `'${col}' reicht von ${minVal} bis ${maxVal} bei einem Durchschnitt von ${avgVal} (Höchstwert entspricht dem ${mult}-Fachen des Durchschnitts).`,
+    outlierRec:
+      'Empfehlung: Prüfen Sie Datensätze mit Extremwerten auf echte Ausnahmen oder Eingabefehler und verwenden Sie zusätzlich den Median.',
+    comparisonTitle: (m1, m2) => `Leistungsvergleich zwischen (${m1}) und (${m2})`,
+    comparisonDesc: (isDrop, v1, m1, v2, m2, pct) =>
+      `Der Durchschnitt ${isDrop ? 'sank' : 'stieg'} von ${v1} in '${m1}' auf ${v2} in '${m2}', was einem ${isDrop ? 'Rückgang' : 'Anstieg'} von ${pct}% entspricht.`,
+    comparisonRecDrop:
+      'Empfehlung: Analysieren Sie die Ursachen des Rückgangs in leistungsschwächeren Segmenten und leiten Sie umgehend Korrekturmaßnahmen ein.',
+    comparisonRecRise:
+      'Empfehlung: Nutzen Sie diese positive Dynamik und übertragen Sie die Erfolgsfaktoren auf weitere Segmente.',
   },
   es: {
     completenessTitle: (pct) => `${pct}% de integridad de datos`,
@@ -81,6 +125,18 @@ const INSIGHT_TEMPLATES: Record<
       `La categoría '${topCat}' lidera con ${metric} de ${topVal}, superando a '${lowCat}' (${lowVal}) en un ${pctDiff}%.`,
     varianceRec: (topCat) =>
       `Recomendación: Estudie los factores de éxito de '${topCat}' y replique las mejores prácticas en los segmentos de menor rendimiento.`,
+    outlierTitle: (col) => `Dispersión pronunciada y valores atípicos en (${col})`,
+    outlierDesc: (col, minVal, maxVal, avgVal, mult) =>
+      `'${col}' oscila entre ${minVal} y ${maxVal} con un promedio de ${avgVal} (el valor máximo equivale a ${mult} veces el promedio).`,
+    outlierRec:
+      'Recomendación: Revise los registros con valores extremos para verificar si son excepciones reales o errores de captura, y use la mediana junto al promedio.',
+    comparisonTitle: (m1, m2) => `Comparación de rendimiento entre (${m1}) y (${m2})`,
+    comparisonDesc: (isDrop, v1, m1, v2, m2, pct) =>
+      `El promedio ${isDrop ? 'disminuyó' : 'aumentó'} de ${v1} en '${m1}' a ${v2} en '${m2}', una variación de ${pct}%.`,
+    comparisonRecDrop:
+      'Recomendación: Analice las causas de la caída en los segmentos de menor rendimiento y establezca un plan correctivo inmediato.',
+    comparisonRecRise:
+      'Recomendación: Aproveche este impulso positivo y replique los factores de mejora en otros segmentos.',
   },
   it: {
     completenessTitle: (pct) => `${pct}% di completezza dei dati`,
@@ -98,6 +154,18 @@ const INSIGHT_TEMPLATES: Record<
       `La categoria '${topCat}' è in testa con ${metric} pari a ${topVal}, superando '${lowCat}' (${lowVal}) del ${pctDiff}%.`,
     varianceRec: (topCat) =>
       `Raccomandazione: Analizzare i fattori di successo di '${topCat}' e replicare le best practice nei segmenti meno performanti.`,
+    outlierTitle: (col) => `Forte dispersione e valori anomali in (${col})`,
+    outlierDesc: (col, minVal, maxVal, avgVal, mult) =>
+      `'${col}' varia tra ${minVal} e ${maxVal} con una media di ${avgVal} (il valore massimo è pari a ${mult} volte la media).`,
+    outlierRec:
+      'Raccomandazione: Verificare i record con valori estremi per distinguere eccezioni reali da errori di inserimento e utilizzare la mediana accanto alla media.',
+    comparisonTitle: (m1, m2) => `Confronto delle prestazioni tra (${m1}) e (${m2})`,
+    comparisonDesc: (isDrop, v1, m1, v2, m2, pct) =>
+      `La media è ${isDrop ? 'scesa' : 'salita'} da ${v1} in '${m1}' a ${v2} in '${m2}', con una variazione del ${pct}%.`,
+    comparisonRecDrop:
+      'Raccomandazione: Analizzare le cause del calo nei segmenti meno performanti e definire un piano correttivo immediato.',
+    comparisonRecRise:
+      'Raccomandazione: Sfruttare questo slancio positivo ed estendere i fattori di crescita agli altri segmenti.',
   },
   fr: {
     completenessTitle: (pct) => `${pct}% d’exhaustivité des données`,
@@ -115,6 +183,18 @@ const INSIGHT_TEMPLATES: Record<
       `La catégorie '${topCat}' arrive en tête avec ${metric} de ${topVal}, dépassant '${lowCat}' (${lowVal}) de ${pctDiff}%.`,
     varianceRec: (topCat) =>
       `Recommandation : Étudiez les facteurs de performance de '${topCat}' et appliquez ces bonnes pratiques aux segments moins performants.`,
+    outlierTitle: (col) => `Forte dispersion et valeurs aberrantes dans (${col})`,
+    outlierDesc: (col, minVal, maxVal, avgVal, mult) =>
+      `'${col}' varie entre ${minVal} et ${maxVal} avec une moyenne de ${avgVal} (la valeur maximale équivaut à ${mult} fois la moyenne).`,
+    outlierRec:
+      'Recommandation : Vérifiez les enregistrements extrêmes pour distinguer les exceptions réelles des erreurs de saisie, et utilisez la médiane en complément de la moyenne.',
+    comparisonTitle: (m1, m2) => `Comparaison des performances entre (${m1}) et (${m2})`,
+    comparisonDesc: (isDrop, v1, m1, v2, m2, pct) =>
+      `La moyenne a ${isDrop ? 'diminué' : 'augmenté'} de ${v1} dans '${m1}' à ${v2} dans '${m2}', soit une variation de ${pct}%.`,
+    comparisonRecDrop:
+      'Recommandation : Analysez les causes de la baisse dans les segments les moins performants et mettez en place un plan correctif immédiat.',
+    comparisonRecRise:
+      'Recommandation : Capitalisez sur cette dynamique positive et déployez ces leviers sur les autres segments.',
   },
   ru: {
     completenessTitle: (pct) => `Полнота данных: ${pct}%`,
@@ -132,6 +212,18 @@ const INSIGHT_TEMPLATES: Record<
       `Категория '${topCat}' лидирует (${metric}: ${topVal}), опережая '${lowCat}' (${lowVal}) на ${pctDiff}%.`,
     varianceRec: (topCat) =>
       `Рекомендация: Изучите факторы успеха категории '${topCat}' и внедрите лучшие практики в менее результативных сегментах.`,
+    outlierTitle: (col) => `Резкий разброс и высокие выбросы в (${col})`,
+    outlierDesc: (col, minVal, maxVal, avgVal, mult) =>
+      `Показатель '${col}' варьируется от ${minVal} до ${maxVal} при среднем значении ${avgVal} (максимум в ${mult} раза выше среднего).`,
+    outlierRec:
+      'Рекомендация: Проверьте записи с экстремальными значениями на предмет ошибок ввода или реальных исключений и используйте медиану наряду со средним.',
+    comparisonTitle: (m1, m2) => `Сравнение показателей (${m1}) и (${m2})`,
+    comparisonDesc: (isDrop, v1, m1, v2, m2, pct) =>
+      `Среднее значение ${isDrop ? 'снизилось' : 'выросло'} с ${v1} в '${m1}' до ${v2} в '${m2}' (${pct}%).`,
+    comparisonRecDrop:
+      'Рекомендация: Проанализируйте причины снижения в отстающих сегментах и разработайте план корректирующих мер.',
+    comparisonRecRise:
+      'Рекомендация: Закрепите положительную динамику и масштабируйте факторы роста на другие сегменты.',
   },
   tr: {
     completenessTitle: (pct) => `%${pct} Veri Bütünlüğü`,
@@ -149,6 +241,18 @@ const INSIGHT_TEMPLATES: Record<
       `'${topCat}' kategorisi (${metric}: ${topVal}) lider konumda olup '${lowCat}' (${lowVal}) kategorisinden %${pctDiff} daha yüksek performans gösterdi.`,
     varianceRec: (topCat) =>
       `Öneri: '${topCat}' kategorisinin başarı faktörlerini inceleyin ve en iyi uygulamaları düşük performanslı segmentlere yaygınlaştırın.`,
+    outlierTitle: (col) => `(${col}) Alanında Keskin Yayılım ve Uç Değerler`,
+    outlierDesc: (col, minVal, maxVal, avgVal, mult) =>
+      `'${col}' değeri ${minVal} ile ${maxVal} arasında değişmekte olup ortalaması ${avgVal}'dir (en yüksek değer ortalamanın ${mult} katıdır).`,
+    outlierRec:
+      'Öneri: Gerçek istisnaları veya veri girişi hatalarını doğrulamak için uç değerlere sahip kayıtları inceleyin ve ortalama ile birlikte medyanı kullanın.',
+    comparisonTitle: (m1, m2) => `(${m1}) ve (${m2}) Performans Karşılaştırması`,
+    comparisonDesc: (isDrop, v1, m1, v2, m2, pct) =>
+      `Ortalama, '${m1}' dönemindeki ${v1} seviyesinden '${m2}' döneminde ${v2} seviyesine ${isDrop ? 'geriledi' : 'yükseldi'} (%${pct}).`,
+    comparisonRecDrop:
+      'Öneri: Düşük performanslı segmentlerdeki gerilemenin nedenlerini analiz edin ve acil düzeltici eylem planı uygulayın.',
+    comparisonRecRise:
+      'Öneri: Bu olumlu ivmeyi koruyun ve iyileşme sağlayan etkenleri diğer segmentlere yaygınlaştırın.',
   },
 }
 
@@ -163,16 +267,33 @@ export function extractArabicTokens(insights: InsightItem[]): string[] {
   const tokens = new Set<string>()
   for (const ins of insights) {
     const cleanTitle = normalizeArabic(ins.title)
+
     const colMatch = cleanTitle.match(/حسب\s*\(([^)]+)\)/)
     const colVal = colMatch?.[1]
     if (colVal && /[\u0600-\u06FF]/.test(colVal)) {
       tokens.add(colVal.trim())
     }
+
     const metricMatch = cleanTitle.match(/^تباين\s+(.+?)\s+حسب/)
     const metricVal = metricMatch?.[1]
     if (metricVal && /[\u0600-\u06FF]/.test(metricVal)) {
       tokens.add(metricVal.trim())
     }
+
+    const outlierMatch = cleanTitle.match(/قيم مرتفعة في\s*\(([^)]+)\)/)
+    const outlierVal = outlierMatch?.[1]
+    if (outlierVal && /[\u0600-\u06FF]/.test(outlierVal)) {
+      tokens.add(outlierVal.trim())
+    }
+
+    const compMatches = cleanTitle.matchAll(/\(([^)]+)\)/g)
+    for (const cm of compMatches) {
+      const cv = cm[1]
+      if (cv && /[\u0600-\u06FF]/.test(cv)) {
+        tokens.add(cv.trim())
+      }
+    }
+
     const quoted = ins.description.matchAll(/'([^']+)'/g)
     for (const q of quoted) {
       const qVal = q[1]
@@ -252,6 +373,52 @@ export function formatLocalizedInsights(
       if (q0 && q1 && n0 && n1 && n2) {
         const body = T.varianceDesc(q0, n0, n1, metricName, q1, n2)
         const rec = T.varianceRec(q0)
+        description = `${body} ${rec}`
+      }
+      return { ...ins, title, description }
+    }
+
+    // 4) تفاوت حاد وقيم مرتفعة في (الراتب)
+    const outM = rawTitle.match(/تفاوت حاد وقيم مرتفعة في\s*\(([^)]+)\)/)
+    const outCol = outM?.[1]
+    if (outCol) {
+      const localizedCol = tr(outCol)
+      title = T.outlierTitle(localizedCol)
+      const nums = rawDesc.match(/\d[\d,]*(?:\.\d+)?/g) ?? []
+      const [n0, n1, n2, n3] = nums
+      if (n0 && n1 && n2 && n3) {
+        const body = T.outlierDesc(localizedCol, n0, n1, n2, n3)
+        description = `${body} ${T.outlierRec}`
+      }
+      return { ...ins, title, description }
+    }
+
+    // 5) مقارنة الأداء بين (PER 2019) و (PER 2020)
+    const cmpM = rawTitle.match(/مقارنة الاداء بين\s*\(([^)]+)\)\s*و\s*\(([^)]+)\)/)
+    const m1 = cmpM?.[1]
+    const m2 = cmpM?.[2]
+    if (m1 && m2) {
+      const lm1 = tr(m1)
+      const lm2 = tr(m2)
+      title = T.comparisonTitle(lm1, lm2)
+      const quotes = Array.from(ins.description.matchAll(/'([^']+)'/g)).map((m) =>
+        tr(m[1] ?? '')
+      )
+      // إزالة الأرقام التي بداخل أسماء المقاييس مثل 2019 و 2020 قبل استخراج القيم الفعلية
+      const descWithoutQuotes = rawDesc.replace(/'[^']+'/g, '')
+      const nums = descWithoutQuotes.match(/-?\d[\d,]*(?:\.\d+)?/g) ?? []
+      const [v1, v2, pct] = nums
+      const isDrop = rawDesc.includes('تراجع') || rawDesc.includes('انخفاض')
+      if (v1 && v2 && pct) {
+        const body = T.comparisonDesc(
+          isDrop,
+          v1,
+          quotes[0] || lm1,
+          v2,
+          quotes[1] || lm2,
+          pct
+        )
+        const rec = isDrop ? T.comparisonRecDrop : T.comparisonRecRise
         description = `${body} ${rec}`
       }
       return { ...ins, title, description }
