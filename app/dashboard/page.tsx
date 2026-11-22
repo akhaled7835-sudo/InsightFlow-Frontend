@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
+import { extractArabicTokens, formatLocalizedInsights } from '@/lib/insightTranslator'
 import Link from 'next/link'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
 import { apiRequest, getSession } from '@/lib/api'
@@ -187,6 +188,7 @@ export default function DashboardPage() {
     [datasets]
   )
 
+  const [tokenDict, setTokenDict] = useState<Record<string, string>>({})
   const latestInsights = useMemo(() => {
     const all: Array<{ title: string; description: string; fileName: string; projectId: string }> = []
     datasets.forEach((ds) => {
@@ -203,6 +205,57 @@ export default function DashboardPage() {
     })
     return all.slice(0, 4)
   }, [datasets])
+
+  useEffect(() => {
+    if (lang === 'ar' || latestInsights.length === 0) {
+      setTokenDict({})
+      return
+    }
+    const tokens = extractArabicTokens(latestInsights)
+    if (tokens.length === 0) return
+
+    const cacheKey = `insightflow_all_tokens_${lang}`
+    try {
+      const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null')
+      if (cached && typeof cached === 'object') {
+        setTokenDict(cached)
+        return
+      }
+    } catch {
+      // ignore
+    }
+
+    fetch('/api/copilot/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: `Translate each short Arabic word/phrase in this array into language "${lang}". Return ONLY a valid JSON object {"original": "translation"}:\n${JSON.stringify(tokens)}`,
+      }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        const raw = (data?.reply || '').replace(/```json|```/g, '').trim()
+        const s = raw.indexOf('{')
+        const e = raw.lastIndexOf('}')
+        if (s !== -1 && e !== -1) {
+          const parsed = JSON.parse(raw.slice(s, e + 1))
+          if (parsed && typeof parsed === 'object') {
+            setTokenDict(parsed)
+            localStorage.setItem(cacheKey, JSON.stringify(parsed))
+          }
+        }
+      })
+      .catch(() => null)
+  }, [latestInsights, lang])
+
+  const localizedLatestInsights = useMemo(() => {
+    const translated = formatLocalizedInsights(latestInsights, lang, tokenDict)
+    return latestInsights.map((item, idx) => ({
+      ...item,
+      title: translated[idx]?.title ?? item.title,
+      description: translated[idx]?.description ?? item.description,
+    }))
+  }, [latestInsights, lang, tokenDict])
 
   return (
     <DashboardShell activeItem="overview">
@@ -432,9 +485,9 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          {latestInsights.length > 0 ? (
+          {localizedLatestInsights.length > 0 ? (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {latestInsights.map((item, idx) => (
+              {localizedLatestInsights.map((item, idx) => (
                 <Link
                   key={idx}
                   href={`/projects/${item.projectId}`}
