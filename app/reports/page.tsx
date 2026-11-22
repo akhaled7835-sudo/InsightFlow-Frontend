@@ -6,6 +6,7 @@ import { DashboardShell } from '@/components/dashboard/dashboard-shell'
 import { apiRequest, getSession } from '@/lib/api'
 import { useWorkspaceRole } from '@/lib/useWorkspaceRole'
 import { useTranslation, SUPPORTED_LANGUAGES } from '@/lib/i18n'
+import { extractArabicTokens, formatLocalizedInsights } from '@/lib/insightTranslator'
 import {
   FileText,
   Sparkles,
@@ -43,9 +44,7 @@ function ReportsContent() {
   const [selectedProjectFilter, setSelectedProjectFilter] = useState<string>(initialProjectId)
   const [loading, setLoading] = useState(true)
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null)
-  const [translatedCards, setTranslatedCards] = useState<
-    Record<string, Array<{ title: string; description: string }>>
-  >({})
+  const [tokenDict, setTokenDict] = useState<Record<string, string>>({})
 
   const currentLangObj =
     SUPPORTED_LANGUAGES.find((l) => l.code === lang) || SUPPORTED_LANGUAGES[0]
@@ -151,53 +150,51 @@ function ReportsContent() {
     loadAllProjectReports()
   }, [activeWorkspaceId, roleLoading, lang, t.dimensionsAnalyzed, t.recordsLabel, t.reportDatasetLabel])
 
-  // ترجمة بطاقات التقارير والتوصيات تلقائياً عند اختيار لغة غير العربية
   useEffect(() => {
     if (lang === 'ar' || reports.length === 0) {
-      setTranslatedCards({})
+      setTokenDict({})
       return
     }
 
-    reports.forEach((rep) => {
-      const itemKey = `${rep.projectId}-${rep.fileName}`
-      const hasArabic = rep.insights.some(
-        (i) => /[\u0600-\u06FF]/.test(i.title) || /[\u0600-\u06FF]/.test(i.description)
-      )
-      if (!hasArabic) return
+    const allTokens = new Set<string>()
+    reports.forEach((r) => extractArabicTokens(r.insights).forEach((tk) => allTokens.add(tk)))
+    const tokensArr = Array.from(allTokens)
+    if (tokensArr.length === 0) return
 
-      const cacheKey = `insightflow_rep_cards_${lang}_${itemKey}`
-      try {
-        const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null')
-        if (Array.isArray(cached) && cached.length > 0) {
-          setTranslatedCards((prev) => ({ ...prev, [itemKey]: cached }))
-          return
-        }
-      } catch {
-        // ignore
+    const cacheKey = `insightflow_all_tokens_${lang}`
+    try {
+      const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null')
+      if (cached && typeof cached === 'object') {
+        setTokenDict(cached)
       }
+    } catch {
+      // ignore
+    }
 
-      fetch('/api/copilot/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: `Translate each object's "title" and "description" in this JSON array into language code "${lang}". Keep all numbers accurate. Return ONLY a valid JSON array with the exact same structure:\n${JSON.stringify(rep.insights)}`,
-        }),
-      })
-        .then((r) => r.json())
-        .then((data) => {
-          const raw = (data?.reply || '').replace(/```json|```/g, '').trim()
-          const start = raw.indexOf('[')
-          const end = raw.lastIndexOf(']')
-          if (start !== -1 && end !== -1) {
-            const parsed = JSON.parse(raw.slice(start, end + 1))
-            if (Array.isArray(parsed)) {
-              setTranslatedCards((prev) => ({ ...prev, [itemKey]: parsed }))
-              localStorage.setItem(cacheKey, JSON.stringify(parsed))
-            }
-          }
-        })
-        .catch(() => null)
+    fetch('/api/copilot/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: `Translate each short Arabic word/phrase in this array into language "${lang}". Return ONLY a valid JSON object {"original": "translation"}:\n${JSON.stringify(tokensArr)}`,
+      }),
     })
+      .then((r) => r.json())
+      .then((data) => {
+        const raw = (data?.reply || '').replace(/```json|```/g, '').trim()
+        const s = raw.indexOf('{')
+        const e = raw.lastIndexOf('}')
+        if (s !== -1 && e !== -1) {
+          const parsed = JSON.parse(raw.slice(s, e + 1))
+          if (parsed && typeof parsed === 'object') {
+            setTokenDict((prev) => {
+              const merged = { ...prev, ...parsed }
+              localStorage.setItem(cacheKey, JSON.stringify(merged))
+              return merged
+            })
+          }
+        }
+      })
+      .catch(() => null)
   }, [reports, lang])
 
   async function handleDownloadLocalizedReport(rep: ProjectReportItem) {
@@ -205,7 +202,7 @@ function ReportsContent() {
     setDownloadingKey(key)
     try {
       const targetLanguageName = `${currentLangObj.englishName} (${currentLangObj.nativeName})`
-      const activeInsights = translatedCards[key] || rep.insights
+      const activeInsights = formatLocalizedInsights(rep.insights, lang, tokenDict)
       const rawFindings = activeInsights
         .map((i, idx) => `${idx + 1}. ${i.title}: ${i.description}`)
         .join('\n')
@@ -340,10 +337,7 @@ ${rawFindings}`,
           {filteredReports.map((rep) => {
             const itemKey = `${rep.projectId}-${rep.fileName}`
             const isDownloading = downloadingKey === itemKey
-            const displayedInsights =
-              lang !== 'ar' && translatedCards[itemKey]?.length
-                ? translatedCards[itemKey]
-                : rep.insights
+            const displayedInsights = formatLocalizedInsights(rep.insights, lang, tokenDict)
 
             return (
               <div

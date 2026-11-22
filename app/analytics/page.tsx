@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
 import { apiRequest } from '@/lib/api'
 import { useWorkspaceRole } from '@/lib/useWorkspaceRole'
 import { useTranslation } from '@/lib/i18n'
+import { extractArabicTokens, formatLocalizedInsights } from '@/lib/insightTranslator'
 import {
   BarChart3,
   Layers,
@@ -279,9 +280,7 @@ export default function AnalyticsPage() {
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [reanalyzing, setReanalyzing] = useState(false)
-  const [translatedInsights, setTranslatedInsights] = useState<
-    Array<{ title: string; description: string }>
-  >([])
+  const [tokenDict, setTokenDict] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (roleLoading) return
@@ -365,57 +364,51 @@ export default function AnalyticsPage() {
   )
 
   useEffect(() => {
-    if (!activeItem) {
-      setTranslatedInsights([])
+    if (!activeItem || lang === 'ar') {
+      setTokenDict({})
       return
     }
-    if (lang === 'ar' || activeItem.insights.length === 0) {
-      setTranslatedInsights(activeItem.insights)
-      return
-    }
+    const tokens = extractArabicTokens(activeItem.insights)
+    if (tokens.length === 0) return
 
-    const hasArabic = activeItem.insights.some(
-      (ins) => /[\u0600-\u06FF]/.test(ins.title) || /[\u0600-\u06FF]/.test(ins.description)
-    )
-    if (!hasArabic) {
-      setTranslatedInsights(activeItem.insights)
-      return
-    }
-
-    const cacheKey = `insightflow_analytics_tr_${lang}_${activeItem.datasetId}`
+    const cacheKey = `insightflow_tokens_${lang}_${activeItem.datasetId}`
     try {
       const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null')
-      if (Array.isArray(cached) && cached.length > 0) {
-        setTranslatedInsights(cached)
+      if (cached && typeof cached === 'object') {
+        setTokenDict(cached)
         return
       }
     } catch {
       // ignore
     }
 
-    setTranslatedInsights(activeItem.insights)
     fetch('/api/copilot/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: `Translate each object's "title" and "description" in this JSON array into language code "${lang}". Keep all numbers and column names accurate. Return ONLY a valid JSON array with the exact same structure:\n${JSON.stringify(activeItem.insights)}`,
+        message: `Translate each short Arabic word/phrase in this array into language "${lang}". Return ONLY a valid JSON object {"original": "translation"}:\n${JSON.stringify(tokens)}`,
       }),
     })
       .then((r) => r.json())
       .then((data) => {
         const raw = (data?.reply || '').replace(/```json|```/g, '').trim()
-        const start = raw.indexOf('[')
-        const end = raw.lastIndexOf(']')
-        if (start !== -1 && end !== -1) {
-          const parsed = JSON.parse(raw.slice(start, end + 1))
-          if (Array.isArray(parsed)) {
-            setTranslatedInsights(parsed)
+        const s = raw.indexOf('{')
+        const e = raw.lastIndexOf('}')
+        if (s !== -1 && e !== -1) {
+          const parsed = JSON.parse(raw.slice(s, e + 1))
+          if (parsed && typeof parsed === 'object') {
+            setTokenDict(parsed)
             localStorage.setItem(cacheKey, JSON.stringify(parsed))
           }
         }
       })
       .catch(() => null)
   }, [activeItem, lang])
+
+  const localizedInsights = useMemo(() => {
+    if (!activeItem) return []
+    return formatLocalizedInsights(activeItem.insights, lang, tokenDict)
+  }, [activeItem, lang, tokenDict])
 
   const totalRecordsAll = useMemo(
     () => datasets.reduce((acc, item) => acc + item.rowCount, 0),
@@ -623,7 +616,7 @@ export default function AnalyticsPage() {
               </div>
 
               <div className="space-y-3">
-                {translatedInsights.map((ins, idx) => (
+                {localizedInsights.map((ins, idx) => (
                   <div
                     key={idx}
                     className="rounded-xl border border-border/70 bg-background/50 p-4 text-start"
