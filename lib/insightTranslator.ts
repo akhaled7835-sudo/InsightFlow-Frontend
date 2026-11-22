@@ -152,26 +152,32 @@ const INSIGHT_TEMPLATES: Record<
   },
 }
 
-function stripDiacritics(str: string): string {
-  return str.replace(/[\u064B-\u065F\u0670]/g, '')
+function normalizeArabic(str: string): string {
+  return str
+    .replace(/[\u064B-\u065F\u0670]/g, '')
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
 }
 
 export function extractArabicTokens(insights: InsightItem[]): string[] {
   const tokens = new Set<string>()
   for (const ins of insights) {
-    const cleanTitle = stripDiacritics(ins.title)
+    const cleanTitle = normalizeArabic(ins.title)
     const colMatch = cleanTitle.match(/حسب\s*\(([^)]+)\)/)
-    if (colMatch?.[1] && /[\u0600-\u06FF]/.test(colMatch[1])) {
-      tokens.add(colMatch[1].trim())
+    const colVal = colMatch?.[1]
+    if (colVal && /[\u0600-\u06FF]/.test(colVal)) {
+      tokens.add(colVal.trim())
     }
     const metricMatch = cleanTitle.match(/^تباين\s+(.+?)\s+حسب/)
-    if (metricMatch?.[1] && /[\u0600-\u06FF]/.test(metricMatch[1])) {
-      tokens.add(metricMatch[1].trim())
+    const metricVal = metricMatch?.[1]
+    if (metricVal && /[\u0600-\u06FF]/.test(metricVal)) {
+      tokens.add(metricVal.trim())
     }
     const quoted = ins.description.matchAll(/'([^']+)'/g)
     for (const q of quoted) {
-      if (q[1] && /[\u0600-\u06FF]/.test(q[1])) {
-        tokens.add(q[1].trim())
+      const qVal = q[1]
+      if (qVal && /[\u0600-\u06FF]/.test(qVal)) {
+        tokens.add(qVal.trim())
       }
     }
   }
@@ -184,41 +190,42 @@ export function formatLocalizedInsights(
   dict: Record<string, string> = {}
 ): InsightItem[] {
   if (lang === 'ar') return insights
-  const T = INSIGHT_TEMPLATES[lang] || INSIGHT_TEMPLATES.en
-  const tr = (s: string) => dict[s.trim()] || dict[stripDiacritics(s.trim())] || s.trim()
+  const T = INSIGHT_TEMPLATES[lang] ?? INSIGHT_TEMPLATES.en!
+  const tr = (s: string): string =>
+    dict[s.trim()] ?? dict[normalizeArabic(s.trim())] ?? s.trim()
 
   return insights.map((ins) => {
-    const rawTitle = stripDiacritics(ins.title)
-    const rawDesc = stripDiacritics(ins.description)
+    const rawTitle = normalizeArabic(ins.title)
+    const rawDesc = normalizeArabic(ins.description)
     let title = ins.title
     let description = ins.description
 
     // 1) اكتمال البيانات بنسبة 100%
     const compPct = rawTitle.match(/اكتمال البيانات بنسبة\s*(\d+(?:\.\d+)?)%/)
-    if (compPct) {
-      title = T.completenessTitle(compPct[1])
-      const rowsM = rawDesc.match(/\((\d[\d,]*)\s*صف\)/)
-      if (rowsM) {
-        description = T.completenessDesc(rowsM[1])
+    const pctStr = compPct?.[1]
+    if (pctStr) {
+      title = T.completenessTitle(pctStr)
+      const nums = rawDesc.match(/\d[\d,]*(?:\.\d+)?/g)
+      const firstNum = nums?.[0]
+      if (firstNum) {
+        description = T.completenessDesc(firstNum)
       }
       return { ...ins, title, description }
     }
 
-    // 2) تركز / تركّز التوزيع حسب (العمود)
+    // 2) تركز التوزيع حسب (العمود)
     const concCol = rawTitle.match(/تركز التوزيع حسب\s*\(([^)]+)\)/)
-    if (concCol) {
-      title = T.concentrationTitle(tr(concCol[1]))
-      const descM = rawDesc.match(
-        /تستحوذ فئة\s*'([^']+)'\s*على الحصة الاكبر بواقع\s*(\d[\d,]*)\s*سجل\s*\((\d+(?:\.\d+)?)%[^)]*\)،?\s*بينما سجلت\s*'([^']+)'\s*الحد الادنى\s*\((\d[\d,]*)\)/
+    const concColName = concCol?.[1]
+    if (concColName) {
+      title = T.concentrationTitle(tr(concColName))
+      const quotes = Array.from(ins.description.matchAll(/'([^']+)'/g)).map((m) =>
+        tr(m[1] ?? '')
       )
-      if (descM) {
-        const body = T.concentrationDesc(
-          tr(descM[1]),
-          descM[2],
-          descM[3],
-          tr(descM[4]),
-          descM[5]
-        )
+      const nums = rawDesc.match(/\d[\d,]*(?:\.\d+)?/g) ?? []
+      const [q0, q1] = quotes
+      const [n0, n1, n2] = nums
+      if (q0 && q1 && n0 && n1 && n2) {
+        const body = T.concentrationDesc(q0, n0, n1, q1, n2)
         const rec = rawDesc.includes('اعتماد مرتفع')
           ? T.concentrationRecHigh
           : T.concentrationRecBalanced
@@ -229,23 +236,22 @@ export function formatLocalizedInsights(
 
     // 3) تباين X حسب (Y)
     const varM = rawTitle.match(/^تباين\s+(.+?)\s+حسب\s*\(([^)]+)\)/)
-    if (varM) {
-      title = T.varianceTitle(tr(varM[1]), tr(varM[2]))
-
-      // الصيغة الفعلية: تتصدر فئة 'Sales Manager' بـ Average يبلغ 35,000.00 متفوقة بنسبة 165.2% على 'Sales rep.' (13,199.17).
-      const descBackendFormat = rawDesc.match(
-        /تتصدر فئة\s*'([^']+)'\s*بـ\s*([^\s]+)\s+(?:يبلغ\s+)?([\d,]+(?:\.\d+)?)\s*متفوقة بنسبة\s*(\d+(?:\.\d+)?)%\s*على\s*'([^']+)'\s*\(([\d,]+(?:\.\d+)?)\)/
+    const varMetric = varM?.[1]
+    const varCol = varM?.[2]
+    if (varMetric && varCol) {
+      title = T.varianceTitle(tr(varMetric), tr(varCol))
+      const quotes = Array.from(ins.description.matchAll(/'([^']+)'/g)).map((m) =>
+        tr(m[1] ?? '')
       )
-      if (descBackendFormat) {
-        const body = T.varianceDesc(
-          tr(descBackendFormat[1]),
-          descBackendFormat[3],
-          descBackendFormat[4],
-          tr(descBackendFormat[2]),
-          tr(descBackendFormat[5]),
-          descBackendFormat[6]
-        )
-        const rec = T.varianceRec(tr(descBackendFormat[1]))
+      const metricMatch = rawDesc.match(/بـ\s*([^\s]+)\s+/)
+      const metricName = metricMatch?.[1] ? tr(metricMatch[1]) : tr(varMetric)
+      const nums = rawDesc.match(/\d[\d,]*(?:\.\d+)?/g) ?? []
+      const [q0, q1] = quotes
+      const [n0, n1, n2] = nums
+
+      if (q0 && q1 && n0 && n1 && n2) {
+        const body = T.varianceDesc(q0, n0, n1, metricName, q1, n2)
+        const rec = T.varianceRec(q0)
         description = `${body} ${rec}`
       }
       return { ...ins, title, description }

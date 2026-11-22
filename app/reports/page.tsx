@@ -56,26 +56,48 @@ function ReportsContent() {
       setLoading(true)
       try {
         const session = getSession()
-        let wsId = activeWorkspaceId || session?.workspaceId
-        if (!wsId) {
-          const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
-          const firstWs = wsList?.[0]
-          wsId = firstWs?.id || firstWs?.workspaceId
+        const wsIds = new Set<string>()
+        if (activeWorkspaceId && activeWorkspaceId !== 'default') wsIds.add(activeWorkspaceId)
+        if (session?.workspaceId && session.workspaceId !== 'default') wsIds.add(session.workspaceId)
+
+        const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
+        if (Array.isArray(wsList)) {
+          wsList.forEach((w) => {
+            const id = w?.id || w?.workspaceId
+            if (id) wsIds.add(id)
+          })
         }
 
-        let projList: Array<{ id: string; name: string }> = []
-        if (wsId && wsId !== 'default') {
+        const projectMap = new Map<string, { id: string; name: string }>()
+        for (const wsId of wsIds) {
           const rawProjects = await apiRequest<any[]>(`/api/workspaces/${wsId}/projects`).catch(
             () => []
           )
           if (Array.isArray(rawProjects)) {
-            projList = rawProjects.map((p) => ({
-              id: p.id || p.projectId,
-              name: p.name || 'Untitled Project',
-            }))
-            setProjects(projList)
+            rawProjects.forEach((p) => {
+              const pid = p.id || p.projectId
+              if (pid) {
+                projectMap.set(pid, { id: pid, name: p.name || 'Project' })
+              }
+            })
           }
         }
+
+        // أيضاً التقاط أي مشاريع مخزنة محلياً في المتصفح
+        if (typeof window !== 'undefined') {
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i)
+            if (k && k.startsWith('insightflow_project_files_')) {
+              const pid = k.replace('insightflow_project_files_', '')
+              if (pid && !projectMap.has(pid)) {
+                projectMap.set(pid, { id: pid, name: 'Project' })
+              }
+            }
+          }
+        }
+
+        const projList = Array.from(projectMap.values())
+        setProjects(projList)
 
         const uniqueReportsMap = new Map<string, ProjectReportItem>()
 
@@ -110,6 +132,29 @@ function ReportsContent() {
                 Array.isArray(localMatch?.insights) && localMatch.insights.length > 0
                   ? localMatch.insights
                   : []
+
+              if (insList.length === 0 && dsId) {
+                const insRes = await apiRequest<any>(
+                  `/api/analytics/datasets/${dsId}/insights`,
+                  {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      metrics: [],
+                      groupBy: [],
+                      filters: [],
+                      comparisons: [],
+                    }),
+                  }
+                ).catch(() => null)
+
+                const rawIns = insRes?.insights || insRes?.Insights || []
+                if (Array.isArray(rawIns) && rawIns.length > 0) {
+                  insList = rawIns.map((item: any) => ({
+                    title: item.title || item.Title || 'Metric',
+                    description: item.description || item.Description || item.message || '',
+                  }))
+                }
+              }
 
               if (insList.length === 0 && (rows > 0 || cols > 0)) {
                 insList = [
