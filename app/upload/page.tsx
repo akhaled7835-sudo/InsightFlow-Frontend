@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import {
   UploadCloud,
@@ -17,6 +17,7 @@ import {
   Lock,
 } from 'lucide-react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { apiRequest, ApiError, API_BASE_URL, TOKEN_KEY, getLang } from '@/lib/api'
 import { useTranslation } from '@/lib/i18n'
 import { useWorkspaceRole } from '@/lib/useWorkspaceRole'
@@ -388,9 +389,11 @@ async function parseLocalSpreadsheetSample(file: File): Promise<{
   }
 }
 
-export default function UploadPage() {
+function UploadPageContent() {
   const { lang } = useTranslation()
   const L = UPLOAD_LOCALES[lang] ?? UPLOAD_LOCALES.en!
+  const searchParams = useSearchParams()
+  const preselectedProjectId = searchParams.get('projectId') || ''
   const { canAnalyzeAndUpload, loading: roleLoading, activeWorkspaceId } = useWorkspaceRole()
   const [dragging, setDragging] = useState(false)
   const [files, setFiles] = useState<UploadFile[]>([])
@@ -408,34 +411,48 @@ export default function UploadPage() {
 
     async function loadContext() {
       try {
-        let wsId = activeWorkspaceId
-        if (!wsId) {
-          const wsList = await apiRequest<any[]>('/api/workspaces')
-          const firstWs = wsList?.[0]
-          wsId = firstWs?.id || firstWs?.workspaceId
+        const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
+        const wsIds = new Set<string>()
+        if (activeWorkspaceId && activeWorkspaceId !== 'default') wsIds.add(activeWorkspaceId)
+        if (Array.isArray(wsList)) {
+          wsList.forEach((w) => {
+            const id = w?.id || w?.workspaceId
+            if (id && id !== 'default') wsIds.add(id)
+          })
         }
 
-        if (wsId) {
-          setWorkspaceId(wsId)
-          const projList = await apiRequest<any[]>(`/api/workspaces/${wsId}/projects`)
-          if (Array.isArray(projList) && projList.length > 0) {
-            const mapped = projList.map((p) => ({
-              id: p.id || p.projectId,
-              name: p.name || 'Project',
-            }))
-            setProjects(mapped)
-            if (mapped[0]) setSelectedProjectId(mapped[0].id)
-          } else {
-            setProjects([])
-            setSelectedProjectId('')
+        const firstWsId = Array.from(wsIds)[0] || ''
+        if (firstWsId) setWorkspaceId(firstWsId)
+
+        const allProjects: Array<{ id: string; name: string }> = []
+        for (const wId of wsIds) {
+          const projList = await apiRequest<any[]>(`/api/workspaces/${wId}/projects`).catch(
+            () => []
+          )
+          if (Array.isArray(projList)) {
+            projList.forEach((p) => {
+              const pid = p.id || p.projectId
+              if (pid && !allProjects.some((existing) => existing.id === pid)) {
+                allProjects.push({ id: pid, name: p.name || 'Project' })
+              }
+            })
           }
+        }
+
+        if (allProjects.length > 0) {
+          setProjects(allProjects)
+          const matchFromUrl = allProjects.find((p) => p.id === preselectedProjectId)
+          setSelectedProjectId(matchFromUrl ? matchFromUrl.id : allProjects[0]!.id)
+        } else {
+          setProjects([])
+          setSelectedProjectId('')
         }
       } catch (error) {
         console.error('Failed to load workspace projects:', error)
       }
     }
     loadContext()
-  }, [activeWorkspaceId, roleLoading])
+  }, [activeWorkspaceId, roleLoading, preselectedProjectId])
 
   async function handleCreateProject(e: React.FormEvent) {
     e.preventDefault()
@@ -531,7 +548,6 @@ export default function UploadPage() {
 
           const { columnNames, sampleRows } = await parsedPromise
 
-          // نحفظ الرؤى بصيغتها الأصلية حتى تعمل الترجمة الفورية 0ms في جميع صفحات المنصة
           const newDatasetRecord = {
             id: datasetId,
             fileId,
@@ -668,7 +684,6 @@ export default function UploadPage() {
       if (!res.ok) throw new Error('Failed to download report')
       let blob = await res.blob()
 
-      // ترجمة محتوى ملف الإكسل تلقائياً إلى اللغة المختارة حالياً في المنصة
       if (format === 'excel' && activeLang !== 'en') {
         try {
           const arrayBuffer = await blob.arrayBuffer()
@@ -1045,5 +1060,13 @@ export default function UploadPage() {
         )}
       </div>
     </DashboardShell>
+  )
+}
+
+export default function UploadPage() {
+  return (
+    <Suspense fallback={null}>
+      <UploadPageContent />
+    </Suspense>
   )
 }

@@ -447,19 +447,25 @@ export default function ProjectDashboardPage() {
 
     try {
       const session = getSession()
-      let wsId = activeWorkspaceId || session?.workspaceId
-
-      if (!wsId) {
-        const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
-        const firstWs = wsList?.[0]
-        wsId = firstWs?.id || firstWs?.workspaceId
+      const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
+      const allWsIds = new Set<string>()
+      if (activeWorkspaceId && activeWorkspaceId !== 'default') allWsIds.add(activeWorkspaceId)
+      if (session?.workspaceId && session.workspaceId !== 'default') allWsIds.add(session.workspaceId)
+      if (Array.isArray(wsList)) {
+        wsList.forEach((w) => {
+          const id = w?.id || w?.workspaceId
+          if (id && id !== 'default') allWsIds.add(id)
+        })
       }
 
-      if (wsId) {
+      for (const wId of allWsIds) {
         const projRes = await apiRequest<any>(
-          `/api/workspaces/${wsId}/projects/${projectId}`
+          `/api/workspaces/${wId}/projects/${projectId}`
         ).catch(() => null)
-        if (projRes) setProject(projRes)
+        if (projRes && (projRes.id || projRes.name)) {
+          setProject(projRes)
+          break
+        }
       }
 
       const storageKey = `insightflow_project_files_${projectId}`
@@ -565,7 +571,6 @@ export default function ProjectDashboardPage() {
   const activeDataset = datasets[selectedDatasetIndex]
   const rawInsights: Array<{ title: string; description: string }> = activeDataset?.insights ?? []
 
-  // ترجمة الكلمات العربية الفريدة (أسماء الأعمدة والقيم) وتخزينها في الكاش المشترك
   useEffect(() => {
     if (lang === 'ar' || rawInsights.length === 0) {
       setTranslatedMap({})
@@ -612,7 +617,6 @@ export default function ProjectDashboardPage() {
       .catch(() => null)
   }, [lang, rawInsights])
 
-  // ترجمة فورية وحتمية في 0ms لكل البطاقات عند تغيير اللغة
   const insights = useMemo(
     () => formatLocalizedInsights(rawInsights, lang, translatedMap),
     [rawInsights, lang, translatedMap]
@@ -659,7 +663,6 @@ export default function ProjectDashboardPage() {
       isNegative: boolean
     }> = []
 
-    // نعتمد على rawInsights لاستخراج الأرقام بدقة 100% ثم نعرض التسميات باللغة الحالية
     rawInsights.forEach((ins, idx) => {
       const title = ins.title || ''
       const desc = ins.description || ''
@@ -671,7 +674,6 @@ export default function ProjectDashboardPage() {
         return
       }
 
-      // 1) نمط التباين: تتصدر فئة 'A' بـ Average يبلغ 35,000.00 متفوقة بنسبة 165.2% على 'B' (13,199.17)
       const quotes = Array.from(desc.matchAll(/'([^']+)'/g)).map((m) => tr(m[1] ?? ''))
       const nums = (desc.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((n) =>
         parseFloat(n.replace(/,/g, ''))
@@ -733,7 +735,6 @@ export default function ProjectDashboardPage() {
         return
       }
 
-      // 2) نمط التركز: تستحوذ فئة 'A' على الحصة الأكبر بواقع 36 سجل (97.3%...)
       const isConcentration =
         title.includes('تركز') ||
         title.includes('تركّز') ||
@@ -779,7 +780,6 @@ export default function ProjectDashboardPage() {
         return
       }
 
-      // 3) نمط مقارنة الفترات أو القيم المرتفعة
       const firstNum = nums[0]
       if (firstNum !== undefined && !isNaN(firstNum)) {
         const cleanLabel = tr(title.replace(/[()]/g, '').trim())
@@ -932,7 +932,7 @@ export default function ProjectDashboardPage() {
             </Link>
             {canAnalyzeAndUpload && (
               <Link
-                href="/upload"
+                href={`/upload?projectId=${projectId}`}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
               >
                 <Upload className="h-3.5 w-3.5" />
@@ -1537,7 +1537,7 @@ export default function ProjectDashboardPage() {
             </p>
             {canAnalyzeAndUpload && (
               <Link
-                href="/upload"
+                href={`/upload?projectId=${projectId}`}
                 className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-medium text-primary-foreground shadow hover:bg-primary/90"
               >
                 {L.uploadNowBtn}
