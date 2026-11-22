@@ -152,7 +152,6 @@ const INSIGHT_TEMPLATES: Record<
   },
 }
 
-// إزالة التشكيل العربي لتسهيل المطابقة الدقيقة
 function stripDiacritics(str: string): string {
   return str.replace(/[\u064B-\u065F\u0670]/g, '')
 }
@@ -210,10 +209,7 @@ export function formatLocalizedInsights(
     if (concCol) {
       title = T.concentrationTitle(tr(concCol[1]))
       const descM = rawDesc.match(
-        /تستحوذ فئة\s*'([^']+)'\s*على الحصة الاكبر بواقع\s*(\d[\d,]*)\s*سجل\s*\((\d+(?:\.\d+)?)%\s*من الاجمالي\)،?\s*بينما سجلت\s*'([^']+)'\s*الحد الادنى\s*\((\d[\d,]*)\)/
-      ) ||
-      rawDesc.match(
-        /تستحوذ فئة\s*'([^']+)'\s*على الحصة الأكبر بواقع\s*(\d[\d,]*)\s*سجل\s*\((\d+(?:\.\d+)?)%\s*من الإجمالي\)،?\s*بينما سجلت\s*'([^']+)'\s*الحد الأدنى\s*\((\d[\d,]*)\)/
+        /تستحوذ فئة\s*'([^']+)'\s*على الحصة الاكبر بواقع\s*(\d[\d,]*)\s*سجل\s*\((\d+(?:\.\d+)?)%[^)]*\)،?\s*بينما سجلت\s*'([^']+)'\s*الحد الادنى\s*\((\d[\d,]*)\)/
       )
       if (descM) {
         const body = T.concentrationDesc(
@@ -236,9 +232,9 @@ export function formatLocalizedInsights(
     if (varM) {
       title = T.varianceTitle(tr(varM[1]), tr(varM[2]))
 
-      // الصيغة الفعلية من الـ Backend: تتصدر فئة 'Sales Manager' بـ Average 35,000.00 متفوقة بنسبة 165.2% على 'Sales rep.' (13,199.17).
+      // الصيغة الفعلية: تتصدر فئة 'Sales Manager' بـ Average يبلغ 35,000.00 متفوقة بنسبة 165.2% على 'Sales rep.' (13,199.17).
       const descBackendFormat = rawDesc.match(
-        /تتصدر فئة\s*'([^']+)'\s*بـ\s*([^\s]+)\s+([\d,]+(?:\.\d+)?)\s*متفوقة بنسبة\s*(\d+(?:\.\d+)?)%\s*على\s*'([^']+)'\s*\(([\d,]+(?:\.\d+)?)\)/
+        /تتصدر فئة\s*'([^']+)'\s*بـ\s*([^\s]+)\s+(?:يبلغ\s+)?([\d,]+(?:\.\d+)?)\s*متفوقة بنسبة\s*(\d+(?:\.\d+)?)%\s*على\s*'([^']+)'\s*\(([\d,]+(?:\.\d+)?)\)/
       )
       if (descBackendFormat) {
         const body = T.varianceDesc(
