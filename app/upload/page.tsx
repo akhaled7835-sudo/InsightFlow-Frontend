@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import {
   UploadCloud,
   FileSpreadsheet,
@@ -672,8 +673,79 @@ function UploadPageContent() {
       if (!reportId) throw new Error('Report ID not found')
 
       const token = localStorage.getItem(TOKEN_KEY) || ''
+      const cleanBaseName = fileItem.name.replace(/\.(xlsx|xls|csv)$/i, '')
+
+      // 1) تصدير PDF مترجم بالكامل ومنسق باحترافية
+      if (format === 'pdf') {
+        const localizedIns = formatLocalizedInsights(
+          fileItem.insights ?? [],
+          activeLang,
+          tokenDict
+        )
+        const rawFindings = localizedIns
+          .map((i, idx) => `${idx + 1}. ${i.title}: ${i.description}`)
+          .join('\n\n')
+
+        let finalReportText = rawFindings
+        if (activeLang !== 'en' && rawFindings) {
+          try {
+            const trRes = await fetch('/api/copilot/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                message: `Translate and format this executive data analysis report strictly into language code "${activeLang}". Keep all numbers and column names accurate:\n\n${rawFindings}`,
+              }),
+            })
+            if (trRes.ok) {
+              const trData = await trRes.json()
+              if (trData?.reply) finalReportText = trData.reply
+            }
+          } catch {
+            // fallback to localizedIns
+          }
+        }
+
+        const isRtl = activeLang === 'ar'
+        const printWin = window.open('', '_blank', 'width=920,height=780')
+        if (printWin) {
+          printWin.document.write(`<!DOCTYPE html>
+<html lang="${activeLang}" dir="${isRtl ? 'rtl' : 'ltr'}">
+<head>
+  <meta charset="UTF-8" />
+  <title>${cleanBaseName} - ${activeLocale.reportTitleSuffix}</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 40px; color: #0f172a; line-height: 1.7; }
+    .header { background: #0f172a; color: #fff; padding: 24px 28px; border-radius: 12px; margin-bottom: 24px; }
+    .brand { color: #38bdf8; font-weight: 800; font-size: 12px; letter-spacing: 1.2px; text-transform: uppercase; }
+    h1 { margin: 6px 0 4px; font-size: 22px; }
+    .sub { color: #94a3b8; font-size: 13px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 20px; background: #f1f5f9; padding: 14px 18px; border-radius: 10px; font-size: 13px; margin-bottom: 24px; }
+    .content { white-space: pre-wrap; font-size: 14px; color: #1e293b; background: #fff; border: 1px solid #e2e8f0; padding: 22px; border-radius: 10px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="brand">INSIGHTFLOW AI ANALYTICS</div>
+    <h1>${fileItem.name} — ${activeLocale.reportTitleSuffix}</h1>
+    <div class="sub">${activeLocale.reportDesc}</div>
+  </div>
+  <div class="meta">
+    <span><strong>${L.rowsUnit}:</strong> ${(fileItem.rows ?? 0).toLocaleString(activeLang)}</span>
+    <span><strong>${L.colsUnit}:</strong> ${fileItem.columns ?? 0}</span>
+    <span><strong>Date:</strong> ${new Date().toLocaleDateString(activeLang)}</span>
+  </div>
+  <div class="content">${finalReportText.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+  <script>window.onload = function() { window.print(); };</script>
+</body>
+</html>`)
+          printWin.document.close()
+        }
+        return
+      }
+
+      // 2) تصدير Excel مع الحفاظ على 100% من التصميم والألوان وعرض الأعمدة الأصلي via ExcelJS
       const res = await fetch(
-        `${API_BASE_URL}/api/projects/${selectedProjectId}/reports/${reportId}/${format}`,
+        `${API_BASE_URL}/api/projects/${selectedProjectId}/reports/${reportId}/excel`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -684,22 +756,20 @@ function UploadPageContent() {
       if (!res.ok) throw new Error('Failed to download report')
       let blob = await res.blob()
 
-      if (format === 'excel' && activeLang !== 'en') {
+      if (activeLang !== 'en') {
         try {
           const arrayBuffer = await blob.arrayBuffer()
-          const workbook = XLSX.read(arrayBuffer, { type: 'array' })
+          const wb = new ExcelJS.Workbook()
+          await wb.xlsx.load(arrayBuffer)
 
+          // جمع كل النصوص الفريدة من كل الشيتات
           const uniqueTexts = new Set<string>()
-          workbook.SheetNames.forEach((sheetName) => {
-            if (sheetName.trim().length > 1) uniqueTexts.add(sheetName.trim())
-            const sheet = workbook.Sheets[sheetName]
-            if (!sheet) return
-            const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1 })
-            rows.forEach((row) => {
-              if (!Array.isArray(row)) return
-              row.forEach((cell) => {
-                if (typeof cell === 'string') {
-                  const trimmed = cell.trim()
+          wb.eachSheet((ws) => {
+            if (ws.name.trim().length > 1) uniqueTexts.add(ws.name.trim())
+            ws.eachRow((row) => {
+              row.eachCell((cell) => {
+                if (typeof cell.value === 'string') {
+                  const trimmed = cell.value.trim()
                   if (
                     trimmed.length > 1 &&
                     !/^\d[\d,./:%+-]*$/.test(trimmed) &&
@@ -720,13 +790,18 @@ function UploadPageContent() {
             dict = {}
           }
 
-          const missing = Array.from(uniqueTexts).filter((txt) => !dict[txt]).slice(0, 120)
+          const missing = Array.from(uniqueTexts).filter((txt) => !dict[txt])
           if (missing.length > 0) {
             const trRes = await fetch('/api/copilot/chat', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                message: `Translate each string in this JSON array into language "${activeLang}". Keep numbers, percentages, and proper file names intact. Return ONLY a valid JSON object {"original": "translation"}:\n${JSON.stringify(missing)}`,
+                message: `You are a professional localization engine. Translate every key in the JSON array below into language "${activeLang}".
+Rules:
+- Keep numbers, column identifiers (like Order_ID, Product_Price), and percentages intact.
+- Return ONLY a valid JSON object mapping each exact input string to its translation: {"exact input": "translation"}.
+Input:
+${JSON.stringify(missing)}`,
               }),
             })
             if (trRes.ok) {
@@ -744,38 +819,36 @@ function UploadPageContent() {
             }
           }
 
-          const newWb = XLSX.utils.book_new()
-          workbook.SheetNames.forEach((sheetName) => {
-            const sheet = workbook.Sheets[sheetName]
-            if (!sheet) return
-            const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1 })
-            const translatedRows = rows.map((row) =>
-              Array.isArray(row)
-                ? row.map((cell) =>
-                    typeof cell === 'string' ? (dict[cell.trim()] ?? cell) : cell
-                  )
-                : row
-            )
-            const newSheet = XLSX.utils.aoa_to_sheet(translatedRows)
-            const localizedSheetName = (dict[sheetName.trim()] ?? sheetName)
-              .replace(/[\\/?*[\]:]/g, '')
-              .slice(0, 31)
-            XLSX.utils.book_append_sheet(newWb, newSheet, localizedSheetName || sheetName)
+          // تعديل قيم الخلايا فقط دون لمس الألوان أو الخطوط أو الدمج أو عرض الأعمدة
+          wb.eachSheet((ws) => {
+            const translatedSheetName = dict[ws.name.trim()]
+            if (translatedSheetName) {
+              ws.name = translatedSheetName.replace(/[\\/?*[\]:]/g, '').slice(0, 31) || ws.name
+            }
+            ws.eachRow((row) => {
+              row.eachCell((cell) => {
+                if (typeof cell.value === 'string') {
+                  const trimmed = cell.value.trim()
+                  if (dict[trimmed]) {
+                    cell.value = dict[trimmed]
+                  }
+                }
+              })
+            })
           })
 
-          const wbOut = XLSX.write(newWb, { bookType: 'xlsx', type: 'array' })
-          blob = new Blob([wbOut], {
+          const outBuffer = await wb.xlsx.writeBuffer()
+          blob = new Blob([outBuffer], {
             type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           })
         } catch (xlErr) {
-          console.warn('Excel localization fallback:', xlErr)
+          console.warn('ExcelJS localization error:', xlErr)
         }
       }
 
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      const cleanBaseName = fileItem.name.replace(/\.(xlsx|xls|csv)$/i, '')
       a.download = `${cleanBaseName}-${activeLocale.reportFileSuffix}.${format === 'excel' ? 'xlsx' : 'pdf'}`
       a.click()
       URL.revokeObjectURL(url)
