@@ -38,6 +38,290 @@ type UploadFile = {
   insights?: Array<{ type?: string; title: string; description: string; severity?: string }>
 }
 
+const UPLOAD_LOCALES: Record<
+  string,
+  {
+    viewerTitle: string
+    viewerDesc: string
+    viewAnalyticsBtn: string
+    backDashBtn: string
+    title: string
+    subtitle: string
+    targetProjectLabel: string
+    noProjectsOption: string
+    newProjectPlaceholder: string
+    createProjectBtn: string
+    createProjectErr: string
+    selectProjectErr: string
+    unsupportedFormatErr: string
+    maxSizeErr: string
+    uploadFailedErr: string
+    dropHereText: string
+    dragDropText: string
+    supportedSubtitle: string
+    browseFilesBtn: string
+    maxSizeBadge: string
+    processingStatusTitle: string
+    rowsUnit: string
+    colsUnit: string
+    uploadingMsg: string
+    processingMsg: string
+    successMsg: string
+    pdfReportBtn: string
+    excelReportBtn: string
+    aiInsightsTitle: string
+  }
+> = {
+  en: {
+    viewerTitle: 'Viewer Access Only',
+    viewerDesc: 'Your account has Viewer permissions in this workspace; creating projects or uploading files is disabled.',
+    viewAnalyticsBtn: 'Explore Current Analytics',
+    backDashBtn: 'Back to Dashboard',
+    title: 'Upload & Analyze Data',
+    subtitle: 'Import Excel and CSV files to generate instant AI insights and executive reports.',
+    targetProjectLabel: 'Target Project',
+    noProjectsOption: 'No projects yet — create one',
+    newProjectPlaceholder: 'New project name...',
+    createProjectBtn: 'Create Project',
+    createProjectErr: 'Failed to create project',
+    selectProjectErr: 'Please select or create a project first.',
+    unsupportedFormatErr: 'Unsupported format. Please upload .xlsx or .csv files.',
+    maxSizeErr: 'File size exceeds the 50 MB limit.',
+    uploadFailedErr: 'Failed to upload or analyze the file. Please try again.',
+    dropHereText: 'Drop the file here',
+    dragDropText: 'Drag & drop data files here',
+    supportedSubtitle: 'Supports Excel (.xlsx) and CSV files for instant AI analysis',
+    browseFilesBtn: 'Browse Files',
+    maxSizeBadge: '• Max 50 MB',
+    processingStatusTitle: 'Files & Processing Status',
+    rowsUnit: 'rows',
+    colsUnit: 'columns',
+    uploadingMsg: 'Uploading file...',
+    processingMsg: 'Processing data and extracting AI insights...',
+    successMsg: 'Processed successfully',
+    pdfReportBtn: 'PDF Report',
+    excelReportBtn: 'Excel Report',
+    aiInsightsTitle: 'AI Insights —',
+  },
+  ar: {
+    viewerTitle: 'صلاحية مشاهدة فقط (Viewer)',
+    viewerDesc: 'حسابك مقيّد بصلاحية المشاهدة فقط داخل هذه المساحة؛ لا يمكنك إنشاء مشاريع جديدة أو رفع وتحليل الملفات.',
+    viewAnalyticsBtn: 'استعراض التحليلات الحالية',
+    backDashBtn: 'العودة للوحة التحكم',
+    title: 'رفع وتحليل البيانات',
+    subtitle: 'استيراد ملفات Excel و CSV لبدء إنشاء التقارير ورؤى الذكاء الاصطناعي الفورية.',
+    targetProjectLabel: 'المشروع المستهدف',
+    noProjectsOption: 'لا توجد مشاريع بعد — أنشئ مشروعاً',
+    newProjectPlaceholder: 'اسم مشروع جديد...',
+    createProjectBtn: 'إنشاء مشروع',
+    createProjectErr: 'فشل في إنشاء المشروع',
+    selectProjectErr: 'الرجاء اختيار أو إنشاء مشروع أولاً.',
+    unsupportedFormatErr: 'صيغة غير مدعومة. يجدر رفع ملفات .xlsx أو .csv.',
+    maxSizeErr: 'حجم الملف يتجاوز الحد الأقصى 50 ميجابايت.',
+    uploadFailedErr: 'فشل رفع أو تحليل الملف. يجدر المحاولة مرة أخرى.',
+    dropHereText: 'أفلت الملف هنا',
+    dragDropText: 'اسحب وأفلت ملفات البيانات هنا',
+    supportedSubtitle: 'تدعم ملفات Excel (.xlsx) و CSV للتحليل الفوري بالذكاء الاصطناعي',
+    browseFilesBtn: 'تصفح الملفات',
+    maxSizeBadge: '• الحد الأقصى 50 ميجابايت',
+    processingStatusTitle: 'حالة المعالجة والملفات',
+    rowsUnit: 'صف',
+    colsUnit: 'أعمدة',
+    uploadingMsg: 'جاري رفع الملف...',
+    processingMsg: 'جاري معالجة البيانات واستخراج الرؤى الذكية...',
+    successMsg: 'تمت المعالجة بنجاح',
+    pdfReportBtn: 'تقرير PDF',
+    excelReportBtn: 'تقرير Excel',
+    aiInsightsTitle: 'رؤى الذكاء الاصطناعي —',
+  },
+  de: {
+    viewerTitle: 'Nur Leseberechtigung (Viewer)',
+    viewerDesc: 'Ihr Konto hat nur Leserechte in diesem Arbeitsbereich; das Erstellen von Projekten oder Hochladen von Dateien ist deaktiviert.',
+    viewAnalyticsBtn: 'Aktuelle Analysen ansehen',
+    backDashBtn: 'Zurück zum Dashboard',
+    title: 'Daten hochladen & analysieren',
+    subtitle: 'Importieren Sie Excel- und CSV-Dateien für sofortige KI-Erkenntnisse und Berichte.',
+    targetProjectLabel: 'Zielprojekt',
+    noProjectsOption: 'Noch keine Projekte — erstellen Sie eines',
+    newProjectPlaceholder: 'Neuer Projektname...',
+    createProjectBtn: 'Projekt erstellen',
+    createProjectErr: 'Projekt konnte nicht erstellt werden',
+    selectProjectErr: 'Bitte wählen oder erstellen Sie zuerst ein Projekt.',
+    unsupportedFormatErr: 'Nicht unterstütztes Format. Bitte laden Sie .xlsx- oder .csv-Dateien hoch.',
+    maxSizeErr: 'Die Dateigröße überschreitet das Limit von 50 MB.',
+    uploadFailedErr: 'Fehler beim Hochladen oder Analysieren der Datei. Bitte erneut versuchen.',
+    dropHereText: 'Datei hier ablegen',
+    dragDropText: 'Datendateien hierher ziehen & ablegen',
+    supportedSubtitle: 'Unterstützt Excel (.xlsx) und CSV für sofortige KI-Analyse',
+    browseFilesBtn: 'Dateien durchsuchen',
+    maxSizeBadge: '• Maximal 50 MB',
+    processingStatusTitle: 'Dateien & Verarbeitungsstatus',
+    rowsUnit: 'Zeilen',
+    colsUnit: 'Spalten',
+    uploadingMsg: 'Datei wird hochgeladen...',
+    processingMsg: 'Daten werden verarbeitet und KI-Erkenntnisse extrahiert...',
+    successMsg: 'Erfolgreich verarbeitet',
+    pdfReportBtn: 'PDF-Bericht',
+    excelReportBtn: 'Excel-Bericht',
+    aiInsightsTitle: 'KI-Erkenntnisse —',
+  },
+  es: {
+    viewerTitle: 'Solo permiso de lectura (Viewer)',
+    viewerDesc: 'Tu cuenta tiene permisos de solo lectura; no puedes crear proyectos ni subir archivos.',
+    viewAnalyticsBtn: 'Explorar analíticas actuales',
+    backDashBtn: 'Volver al panel',
+    title: 'Subir y analizar datos',
+    subtitle: 'Importa archivos Excel y CSV para generar informes y análisis de IA al instante.',
+    targetProjectLabel: 'Proyecto destino',
+    noProjectsOption: 'Aún no hay proyectos — crea uno',
+    newProjectPlaceholder: 'Nombre del nuevo proyecto...',
+    createProjectBtn: 'Crear proyecto',
+    createProjectErr: 'Error al crear el proyecto',
+    selectProjectErr: 'Por favor selecciona o crea un proyecto primero.',
+    unsupportedFormatErr: 'Formato no compatible. Sube archivos .xlsx o .csv.',
+    maxSizeErr: 'El tamaño del archivo supera el límite de 50 MB.',
+    uploadFailedErr: 'Error al subir o analizar el archivo. Inténtalo de nuevo.',
+    dropHereText: 'Suelta el archivo aquí',
+    dragDropText: 'Arrastra y suelta archivos de datos aquí',
+    supportedSubtitle: 'Compatible con Excel (.xlsx) y CSV para análisis instantáneo con IA',
+    browseFilesBtn: 'Explorar archivos',
+    maxSizeBadge: '• Máximo 50 MB',
+    processingStatusTitle: 'Estado de archivos y procesamiento',
+    rowsUnit: 'filas',
+    colsUnit: 'columnas',
+    uploadingMsg: 'Subiendo archivo...',
+    processingMsg: 'Procesando datos y extrayendo hallazgos de IA...',
+    successMsg: 'Procesado correctamente',
+    pdfReportBtn: 'Informe PDF',
+    excelReportBtn: 'Informe Excel',
+    aiInsightsTitle: 'Hallazgos de IA —',
+  },
+  it: {
+    viewerTitle: 'Solo visualizzazione (Viewer)',
+    viewerDesc: 'Il tuo account ha solo permessi di lettura; non puoi creare progetti o caricare file.',
+    viewAnalyticsBtn: 'Esplora analisi attuali',
+    backDashBtn: 'Torna alla dashboard',
+    title: 'Carica e analizza dati',
+    subtitle: 'Importa file Excel e CSV per generare report e analisi IA istantanee.',
+    targetProjectLabel: 'Progetto di destinazione',
+    noProjectsOption: 'Nessun progetto — creane uno',
+    newProjectPlaceholder: 'Nome nuovo progetto...',
+    createProjectBtn: 'Crea progetto',
+    createProjectErr: 'Creazione progetto non riuscita',
+    selectProjectErr: 'Seleziona o crea prima un progetto.',
+    unsupportedFormatErr: 'Formato non supportato. Carica file .xlsx o .csv.',
+    maxSizeErr: 'La dimensione del file supera il limite di 50 MB.',
+    uploadFailedErr: 'Caricamento o analisi non riusciti. Riprova.',
+    dropHereText: 'Rilascia il file qui',
+    dragDropText: 'Trascina e rilascia i file di dati qui',
+    supportedSubtitle: 'Supporta file Excel (.xlsx) e CSV per analisi IA istantanee',
+    browseFilesBtn: 'Sfoglia file',
+    maxSizeBadge: '• Massimo 50 MB',
+    processingStatusTitle: 'Stato elaborazione e file',
+    rowsUnit: 'righe',
+    colsUnit: 'colonne',
+    uploadingMsg: 'Caricamento file...',
+    processingMsg: 'Elaborazione dati ed estrazione analisi IA...',
+    successMsg: 'Elaborato con successo',
+    pdfReportBtn: 'Report PDF',
+    excelReportBtn: 'Report Excel',
+    aiInsightsTitle: 'Analisi IA —',
+  },
+  fr: {
+    viewerTitle: 'Accès en lecture seule (Viewer)',
+    viewerDesc: 'Votre compte dispose uniquement d’un accès en lecture ; la création de projets et l’importation sont désactivées.',
+    viewAnalyticsBtn: 'Consulter les analyses',
+    backDashBtn: 'Retour au tableau de bord',
+    title: 'Importer et analyser des données',
+    subtitle: 'Importez des fichiers Excel et CSV pour générer des rapports et analyses IA instantanés.',
+    targetProjectLabel: 'Projet cible',
+    noProjectsOption: 'Aucun projet — créez-en un',
+    newProjectPlaceholder: 'Nom du nouveau projet...',
+    createProjectBtn: 'Créer un projet',
+    createProjectErr: 'Échec de la création du projet',
+    selectProjectErr: 'Veuillez d’abord sélectionner ou créer un projet.',
+    unsupportedFormatErr: 'Format non pris en charge. Importez des fichiers .xlsx ou .csv.',
+    maxSizeErr: 'La taille du fichier dépasse la limite de 50 Mo.',
+    uploadFailedErr: 'Échec de l’importation ou de l’analyse. Veuillez réessayer.',
+    dropHereText: 'Déposez le fichier ici',
+    dragDropText: 'Glissez-déposez vos fichiers de données ici',
+    supportedSubtitle: 'Prend en charge Excel (.xlsx) et CSV pour une analyse IA instantanée',
+    browseFilesBtn: 'Parcourir les fichiers',
+    maxSizeBadge: '• Max 50 Mo',
+    processingStatusTitle: 'Fichiers & état du traitement',
+    rowsUnit: 'lignes',
+    colsUnit: 'colonnes',
+    uploadingMsg: 'Importation du fichier...',
+    processingMsg: 'Traitement des données et extraction des analyses IA...',
+    successMsg: 'Traité avec succès',
+    pdfReportBtn: 'Rapport PDF',
+    excelReportBtn: 'Rapport Excel',
+    aiInsightsTitle: 'Analyses IA —',
+  },
+  ru: {
+    viewerTitle: 'Только просмотр (Viewer)',
+    viewerDesc: 'У вашей учётной записи права только на просмотр; создание проектов и загрузка файлов недоступны.',
+    viewAnalyticsBtn: 'Перейти к аналитике',
+    backDashBtn: 'Назад на дашборд',
+    title: 'Загрузка и анализ данных',
+    subtitle: 'Импортируйте файлы Excel и CSV для мгновенного ИИ-анализа и создания отчётов.',
+    targetProjectLabel: 'Целевой проект',
+    noProjectsOption: 'Проектов пока нет — создайте новый',
+    newProjectPlaceholder: 'Название нового проекта...',
+    createProjectBtn: 'Создать проект',
+    createProjectErr: 'Не удалось создать проект',
+    selectProjectErr: 'Сначала выберите или создайте проект.',
+    unsupportedFormatErr: 'Неподдерживаемый формат. Загрузите файлы .xlsx или .csv.',
+    maxSizeErr: 'Размер файла превышает лимит 50 МБ.',
+    uploadFailedErr: 'Ошибка загрузки или анализа файла. Попробуйте снова.',
+    dropHereText: 'Отпустите файл здесь',
+    dragDropText: 'Перетащите файлы данных сюда',
+    supportedSubtitle: 'Поддерживаются файлы Excel (.xlsx) и CSV для мгновенного ИИ-анализа',
+    browseFilesBtn: 'Выбрать файлы',
+    maxSizeBadge: '• Максимум 50 МБ',
+    processingStatusTitle: 'Файлы и статус обработки',
+    rowsUnit: 'строк',
+    colsUnit: 'столбцов',
+    uploadingMsg: 'Загрузка файла...',
+    processingMsg: 'Обработка данных и извлечение ИИ-выводов...',
+    successMsg: 'Успешно обработано',
+    pdfReportBtn: 'Отчёт PDF',
+    excelReportBtn: 'Отчёт Excel',
+    aiInsightsTitle: 'Выводы ИИ —',
+  },
+  tr: {
+    viewerTitle: 'Yalnızca Görüntüleme İzni (Viewer)',
+    viewerDesc: 'Hesabınız yalnızca görüntüleme yetkisine sahiptir; proje oluşturma ve dosya yükleme devre dışıdır.',
+    viewAnalyticsBtn: 'Mevcut Analizleri İncele',
+    backDashBtn: 'Kontrol Paneline Dön',
+    title: 'Veri Yükle ve Analiz Et',
+    subtitle: 'Anında yapay zeka içgörüleri ve raporlar oluşturmak için Excel ve CSV dosyalarını içe aktarın.',
+    targetProjectLabel: 'Hedef Proje',
+    noProjectsOption: 'Henüz proje yok — yeni oluşturun',
+    newProjectPlaceholder: 'Yeni proje adı...',
+    createProjectBtn: 'Proje Oluştur',
+    createProjectErr: 'Proje oluşturulamadı',
+    selectProjectErr: 'Lütfen önce bir proje seçin veya oluşturun.',
+    unsupportedFormatErr: 'Desteklenmeyen format. Lütfen .xlsx veya .csv dosyaları yükleyin.',
+    maxSizeErr: 'Dosya boyutu 50 MB sınırını aşıyor.',
+    uploadFailedErr: 'Dosya yüklenemedi veya analiz edilemedi. Tekrar deneyin.',
+    dropHereText: 'Dosyayı buraya bırakın',
+    dragDropText: 'Veri dosyalarını buraya sürükleyip bırakın',
+    supportedSubtitle: 'Anında yapay zeka analizi için Excel (.xlsx) ve CSV desteklenir',
+    browseFilesBtn: 'Dosyalara Göz At',
+    maxSizeBadge: '• Maksimum 50 MB',
+    processingStatusTitle: 'Dosyalar ve İşlem Durumu',
+    rowsUnit: 'satır',
+    colsUnit: 'sütun',
+    uploadingMsg: 'Dosya yükleniyor...',
+    processingMsg: 'Veriler işleniyor ve yapay zeka içgörüleri çıkarılıyor...',
+    successMsg: 'Başarıyla işlendi',
+    pdfReportBtn: 'PDF Raporu',
+    excelReportBtn: 'Excel Raporu',
+    aiInsightsTitle: 'Yapay Zeka İçgörüleri —',
+  },
+}
+
 const MAX_SIZE = 50 * 1024 * 1024
 const ACCEPTED = ['csv', 'xlsx']
 
@@ -55,7 +339,6 @@ function formatSize(bytes: number) {
   return `${(bytes / 1024).toFixed(0)} KB`
 }
 
-// استخراج أسماء الأعمدة وعينة الصفوف الفعلية من الملف لتمكين المساعد الذكي من قراءتها مباشرة
 async function parseLocalSpreadsheetSample(file: File): Promise<{
   columnNames: string[]
   sampleRows: Array<Record<string, any>>
@@ -76,7 +359,8 @@ async function parseLocalSpreadsheetSample(file: File): Promise<{
 }
 
 export default function UploadPage() {
-  const { t } = useTranslation()
+  const { lang } = useTranslation()
+  const L = UPLOAD_LOCALES[lang] || UPLOAD_LOCALES.en
   const { canAnalyzeAndUpload, loading: roleLoading, activeWorkspaceId } = useWorkspaceRole()
   const [dragging, setDragging] = useState(false)
   const [files, setFiles] = useState<UploadFile[]>([])
@@ -106,7 +390,7 @@ export default function UploadPage() {
           if (Array.isArray(projList) && projList.length > 0) {
             const mapped = projList.map((p) => ({
               id: p.id || p.projectId,
-              name: p.name || 'مشروع بدون عنوان',
+              name: p.name || 'Project',
             }))
             setProjects(mapped)
             setSelectedProjectId(mapped[0].id)
@@ -131,7 +415,7 @@ export default function UploadPage() {
         method: 'POST',
         body: JSON.stringify({
           name: newProjectName.trim(),
-          description: 'تم الإنشاء من مركز رفع الملفات في InsightFlow',
+          description: 'Created from InsightFlow Upload Center',
         }),
       })
       const id = created?.id || created?.projectId
@@ -141,7 +425,7 @@ export default function UploadPage() {
         setNewProjectName('')
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'فشل في إنشاء المشروع')
+      alert(err instanceof Error ? err.message : L.createProjectErr)
     } finally {
       setCreatingProject(false)
     }
@@ -154,7 +438,7 @@ export default function UploadPage() {
         setFiles((prev) =>
           prev.map((x) =>
             x.id === itemId
-              ? { ...x, status: 'error', error: 'الرجاء اختيار أو إنشاء مشروع أولاً.' }
+              ? { ...x, status: 'error', error: L.selectProjectErr }
               : x
           )
         )
@@ -162,7 +446,6 @@ export default function UploadPage() {
       }
 
       try {
-        // قراءة عينة الجدول محلياً بالتوازي مع الرفع
         const parsedPromise = parseLocalSpreadsheetSample(f)
 
         const formData = new FormData()
@@ -205,8 +488,32 @@ export default function UploadPage() {
             }
           )
 
-          const insightsList = insightsRes?.insights || insightsRes?.Insights || []
+          let insightsList = insightsRes?.insights || insightsRes?.Insights || []
           const { columnNames, sampleRows } = await parsedPromise
+
+          if (lang !== 'ar' && insightsList.length > 0) {
+            try {
+              const trRes = await fetch('/api/copilot/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  message: `Translate each object's "title" and "description" in this JSON array into language code "${lang}". Keep numbers and column names accurate. Return ONLY a valid JSON array:\n${JSON.stringify(insightsList)}`,
+                }),
+              })
+              if (trRes.ok) {
+                const trData = await trRes.json()
+                const raw = (trData?.reply || '').replace(/```json|```/g, '').trim()
+                const s = raw.indexOf('[')
+                const e = raw.lastIndexOf(']')
+                if (s !== -1 && e !== -1) {
+                  const parsedTr = JSON.parse(raw.slice(s, e + 1))
+                  if (Array.isArray(parsedTr)) insightsList = parsedTr
+                }
+              }
+            } catch {
+              // keep original if translation fails
+            }
+          }
 
           const newDatasetRecord = {
             id: datasetId,
@@ -252,7 +559,7 @@ export default function UploadPage() {
         const message =
           err instanceof ApiError
             ? err.message
-            : 'فشل رفع أو تحليل الملف. يجدر المحاولة مرة أخرى.'
+            : L.uploadFailedErr
         setFiles((prev) =>
           prev.map((x) =>
             x.id === itemId ? { ...x, status: 'error', error: message } : x
@@ -260,7 +567,7 @@ export default function UploadPage() {
         )
       }
     },
-    [selectedProjectId, canAnalyzeAndUpload]
+    [selectedProjectId, canAnalyzeAndUpload, L.selectProjectErr, L.uploadFailedErr, lang]
   )
 
   const addFiles = useCallback(
@@ -278,7 +585,7 @@ export default function UploadPage() {
               size: f.size,
               type,
               status: 'error',
-              error: 'صيغة غير مدعومة. يجدر رفع ملفات .xlsx أو .csv.',
+              error: L.unsupportedFormatErr,
             },
             ...prev,
           ])
@@ -293,7 +600,7 @@ export default function UploadPage() {
               size: f.size,
               type,
               status: 'error',
-              error: 'حجم الملف يتجاوز الحد الأقصى 50 ميجابايت.',
+              error: L.maxSizeErr,
             },
             ...prev,
           ])
@@ -307,7 +614,7 @@ export default function UploadPage() {
         processSingleFile(f, id)
       })
     },
-    [processSingleFile, canAnalyzeAndUpload]
+    [processSingleFile, canAnalyzeAndUpload, L.unsupportedFormatErr, L.maxSizeErr]
   )
 
   async function handleExportReport(format: 'pdf' | 'excel', fileItem: UploadFile) {
@@ -319,14 +626,14 @@ export default function UploadPage() {
         {
           method: 'POST',
           body: JSON.stringify({
-            title: `${fileItem.name} - تقرير تنفيذي`,
-            description: 'مُولد تلقائياً من محرك تحليلات الذكاء الاصطناعي',
+            title: `${fileItem.name} - Executive Report`,
+            description: 'Auto-generated by InsightFlow AI Analytics Engine',
             datasetId: fileItem.datasetId,
           }),
         }
       )
       const reportId = created?.id || created?.reportId
-      if (!reportId) throw new Error('معرف التقرير غير موجود')
+      if (!reportId) throw new Error('Report ID not found')
 
       const token = localStorage.getItem(TOKEN_KEY) || ''
       const res = await fetch(
@@ -338,7 +645,7 @@ export default function UploadPage() {
           },
         }
       )
-      if (!res.ok) throw new Error('فشل تحميل التقرير')
+      if (!res.ok) throw new Error('Failed to download report')
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -347,7 +654,7 @@ export default function UploadPage() {
       a.click()
       URL.revokeObjectURL(url)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'فشل تصدير التقرير')
+      alert(err instanceof Error ? err.message : 'Export failed')
     } finally {
       setExporting(false)
     }
@@ -364,22 +671,20 @@ export default function UploadPage() {
             <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-400">
               <Lock className="h-7 w-7" />
             </span>
-            <h1 className="text-xl font-bold">صلاحية مشاهدة فقط (Viewer)</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              حسابك مقيّد بصلاحية المشاهدة فقط داخل هذه المساحة؛ لا يمكنك إنشاء مشاريع جديدة أو رفع وتحليل الملفات.
-            </p>
+            <h1 className="text-xl font-bold">{L.viewerTitle}</h1>
+            <p className="mt-2 text-sm text-muted-foreground">{L.viewerDesc}</p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <Link
                 href="/analytics"
                 className="rounded-xl bg-primary px-5 py-2.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
               >
-                استعراض التحليلات الحالية
+                {L.viewAnalyticsBtn}
               </Link>
               <Link
                 href="/dashboard"
                 className="rounded-xl border border-border bg-secondary px-5 py-2.5 text-xs font-semibold hover:bg-secondary/80"
               >
-                العودة للوحة التحكم
+                {L.backDashBtn}
               </Link>
             </div>
           </div>
@@ -392,24 +697,22 @@ export default function UploadPage() {
     <DashboardShell activeItem="dataFiles">
       <div className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">رفع وتحليل البيانات</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            استيراد ملفات Excel و CSV لبدء إنشاء التقارير ورؤى الذكاء الاصطناعي الفورية.
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight">{L.title}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{L.subtitle}</p>
         </div>
 
         {/* Project Selector & Quick Create */}
         <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card/50 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
             <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              المشروع المستهدف
+              {L.targetProjectLabel}
             </label>
             <select
               value={selectedProjectId}
               onChange={(e) => setSelectedProjectId(e.target.value)}
               className="h-10 rounded-xl border border-input bg-secondary/60 px-3 text-sm font-medium outline-none focus:border-primary"
             >
-              {projects.length === 0 && <option value="">لا توجد مشاريع بعد — أنشئ مشروعاً</option>}
+              {projects.length === 0 && <option value="">{L.noProjectsOption}</option>}
               {projects.map((p) => (
                 <option key={p.id} value={p.id} className="bg-slate-900">
                   {p.name}
@@ -424,7 +727,7 @@ export default function UploadPage() {
                 type="text"
                 value={newProjectName}
                 onChange={(e) => setNewProjectName(e.target.value)}
-                placeholder="اسم مشروع جديد..."
+                placeholder={L.newProjectPlaceholder}
                 className="h-10 rounded-xl border border-input bg-secondary/40 px-3 text-sm outline-none focus:border-primary"
               />
               <button
@@ -433,7 +736,7 @@ export default function UploadPage() {
                 className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-secondary px-3 text-xs font-medium hover:bg-secondary/80 disabled:opacity-50"
               >
                 <FolderPlus className="h-4 w-4 text-primary" />
-                إنشاء مشروع
+                {L.createProjectBtn}
               </button>
             </form>
           )}
@@ -460,11 +763,9 @@ export default function UploadPage() {
           </span>
           <div>
             <p className="text-base font-semibold">
-              {dragging ? 'أفلت الملف هنا' : 'اسحب وأفلت ملفات البيانات هنا'}
+              {dragging ? L.dropHereText : L.dragDropText}
             </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              تدعم ملفات Excel (.xlsx) و CSV للتحليل الفوري بالذكاء الاصطناعي
-            </p>
+            <p className="mt-1 text-sm text-muted-foreground">{L.supportedSubtitle}</p>
           </div>
           <button
             type="button"
@@ -472,7 +773,7 @@ export default function UploadPage() {
             className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" />
-            تصفح الملفات
+            {L.browseFilesBtn}
           </button>
           <input
             ref={inputRef}
@@ -488,14 +789,14 @@ export default function UploadPage() {
                 {t}
               </span>
             ))}
-            <span>• الحد الأقصى 50 ميجابايت</span>
+            <span>{L.maxSizeBadge}</span>
           </div>
         </div>
 
         {/* Uploaded Files & Live Status */}
         {files.length > 0 && (
           <div className="flex flex-col gap-3">
-            <h3 className="text-sm font-semibold">حالة المعالجة والملفات</h3>
+            <h3 className="text-sm font-semibold">{L.processingStatusTitle}</h3>
             {files.map((f) => (
               <div key={f.id} className="rounded-xl border border-border bg-card/50 p-4">
                 <div className="flex items-center gap-3">
@@ -514,22 +815,23 @@ export default function UploadPage() {
                     </div>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {formatSize(f.size)}
-                      {f.rows !== undefined && ` • ${f.rows.toLocaleString()} صف • ${f.columns} أعمدة`}
+                      {f.rows !== undefined &&
+                        ` • ${f.rows.toLocaleString(lang)} ${L.rowsUnit} • ${f.columns} ${L.colsUnit}`}
                     </p>
                     {f.status === 'uploading' && (
                       <p className="mt-1.5 flex items-center gap-1.5 text-xs text-primary">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> جاري رفع الملف...
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> {L.uploadingMsg}
                       </p>
                     )}
                     {f.status === 'processing' && (
                       <p className="mt-1.5 flex items-center gap-1.5 text-xs text-amber-300">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> جاري معالجة البيانات واستخراج الرؤى الذكية...
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> {L.processingMsg}
                       </p>
                     )}
                     {f.status === 'success' && (
                       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                         <span className="flex items-center gap-1 text-xs font-medium text-emerald-400">
-                          <CheckCircle2 className="h-3.5 w-3.5" /> تمت المعالجة بنجاح
+                          <CheckCircle2 className="h-3.5 w-3.5" /> {L.successMsg}
                         </span>
                         <div className="flex items-center gap-2">
                           <button
@@ -538,7 +840,7 @@ export default function UploadPage() {
                             onClick={() => handleExportReport('pdf', f)}
                             className="inline-flex items-center gap-1 rounded-lg border border-border bg-secondary px-2.5 py-1 text-xs font-medium hover:bg-secondary/80"
                           >
-                            <Download className="h-3.5 w-3.5 text-primary" /> تقرير PDF
+                            <Download className="h-3.5 w-3.5 text-primary" /> {L.pdfReportBtn}
                           </button>
                           <button
                             type="button"
@@ -546,7 +848,7 @@ export default function UploadPage() {
                             onClick={() => handleExportReport('excel', f)}
                             className="inline-flex items-center gap-1 rounded-lg border border-border bg-secondary px-2.5 py-1 text-xs font-medium hover:bg-secondary/80"
                           >
-                            <Download className="h-3.5 w-3.5 text-emerald-400" /> تقرير Excel
+                            <Download className="h-3.5 w-3.5 text-emerald-400" /> {L.excelReportBtn}
                           </button>
                         </div>
                       </div>
@@ -568,7 +870,9 @@ export default function UploadPage() {
           <div className="rounded-2xl border border-primary/30 bg-card/60 p-5">
             <div className="mb-4 flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              <h3 className="text-base font-semibold">رؤى الذكاء الاصطناعي — {latestSuccess.name}</h3>
+              <h3 className="text-base font-semibold">
+                {L.aiInsightsTitle} {latestSuccess.name}
+              </h3>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {latestSuccess.insights.map((ins, idx) => (

@@ -43,6 +43,9 @@ function ReportsContent() {
   const [selectedProjectFilter, setSelectedProjectFilter] = useState<string>(initialProjectId)
   const [loading, setLoading] = useState(true)
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null)
+  const [translatedCards, setTranslatedCards] = useState<
+    Record<string, Array<{ title: string; description: string }>>
+  >({})
 
   const currentLangObj =
     SUPPORTED_LANGUAGES.find((l) => l.code === lang) || SUPPORTED_LANGUAGES[0]
@@ -148,19 +151,67 @@ function ReportsContent() {
     loadAllProjectReports()
   }, [activeWorkspaceId, roleLoading, lang, t.dimensionsAnalyzed, t.recordsLabel, t.reportDatasetLabel])
 
-  // توليد وتنزيل التقرير باللغة المختارة حالياً في المنصة
+  // ترجمة بطاقات التقارير والتوصيات تلقائياً عند اختيار لغة غير العربية
+  useEffect(() => {
+    if (lang === 'ar' || reports.length === 0) {
+      setTranslatedCards({})
+      return
+    }
+
+    reports.forEach((rep) => {
+      const itemKey = `${rep.projectId}-${rep.fileName}`
+      const hasArabic = rep.insights.some(
+        (i) => /[\u0600-\u06FF]/.test(i.title) || /[\u0600-\u06FF]/.test(i.description)
+      )
+      if (!hasArabic) return
+
+      const cacheKey = `insightflow_rep_cards_${lang}_${itemKey}`
+      try {
+        const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null')
+        if (Array.isArray(cached) && cached.length > 0) {
+          setTranslatedCards((prev) => ({ ...prev, [itemKey]: cached }))
+          return
+        }
+      } catch {
+        // ignore
+      }
+
+      fetch('/api/copilot/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `Translate each object's "title" and "description" in this JSON array into language code "${lang}". Keep all numbers accurate. Return ONLY a valid JSON array with the exact same structure:\n${JSON.stringify(rep.insights)}`,
+        }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          const raw = (data?.reply || '').replace(/```json|```/g, '').trim()
+          const start = raw.indexOf('[')
+          const end = raw.lastIndexOf(']')
+          if (start !== -1 && end !== -1) {
+            const parsed = JSON.parse(raw.slice(start, end + 1))
+            if (Array.isArray(parsed)) {
+              setTranslatedCards((prev) => ({ ...prev, [itemKey]: parsed }))
+              localStorage.setItem(cacheKey, JSON.stringify(parsed))
+            }
+          }
+        })
+        .catch(() => null)
+    })
+  }, [reports, lang])
+
   async function handleDownloadLocalizedReport(rep: ProjectReportItem) {
     const key = `${rep.projectId}-${rep.fileName}`
     setDownloadingKey(key)
     try {
       const targetLanguageName = `${currentLangObj.englishName} (${currentLangObj.nativeName})`
-      const rawFindings = rep.insights
+      const activeInsights = translatedCards[key] || rep.insights
+      const rawFindings = activeInsights
         .map((i, idx) => `${idx + 1}. ${i.title}: ${i.description}`)
         .join('\n')
 
       let localizedSummary = ''
 
-      // طلب صياغة التقرير بالكامل باللغة المختارة من المساعد الذكي
       try {
         const aiRes = await fetch('/api/copilot/chat', {
           method: 'POST',
@@ -192,7 +243,6 @@ ${rawFindings}`,
       const dir = currentLangObj.direction
       const formattedDate = new Date().toLocaleDateString(lang)
 
-      // فتح نافذة تقرير احترافية مهيأة للطباعة/الحفظ كـ PDF بنفس اتجاه ولغة المنصة
       const printWindow = window.open('', '_blank', 'width=900,height=750')
       if (printWindow) {
         printWindow.document.write(`<!DOCTYPE html>
@@ -290,6 +340,10 @@ ${rawFindings}`,
           {filteredReports.map((rep) => {
             const itemKey = `${rep.projectId}-${rep.fileName}`
             const isDownloading = downloadingKey === itemKey
+            const displayedInsights =
+              lang !== 'ar' && translatedCards[itemKey]?.length
+                ? translatedCards[itemKey]
+                : rep.insights
 
             return (
               <div
@@ -317,10 +371,10 @@ ${rawFindings}`,
                           <CheckCircle2 className="h-3.5 w-3.5" /> {t.analysisCompleted}
                         </span>
                         <span>
-                          • {rep.rowCount.toLocaleString(lang)} {t.recordsLabel}
+                          - {rep.rowCount.toLocaleString(lang)} {t.recordsLabel}
                         </span>
                         <span>
-                          • {rep.columnCount} {t.dimensionsAnalyzed}
+                          - {rep.columnCount} {t.dimensionsAnalyzed}
                         </span>
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />{' '}
@@ -360,13 +414,15 @@ ${rawFindings}`,
                   <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
                     <Sparkles className="h-4 w-4 text-primary" />
                     <span>
-                      {t.detailedFindingsTitle} ({rep.insights.length})
+                      {t.detailedFindingsTitle} ({displayedInsights.length})
                     </span>
                   </div>
 
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    {rep.insights.map((ins, iIdx) => {
-                      const parts = ins.description.split(/التوصية:|Recommendation:|Empfehlung:/)
+                    {displayedInsights.map((ins, iIdx) => {
+                      const parts = ins.description.split(
+                        /التوصية:|Recommendation:|Empfehlung:|Recomendación:|Raccomandazione:|Recommandation:|Рекомендация:|Öneri:/i
+                      )
                       const findingText = parts[0]?.trim()
                       const recommendationText = parts[1]?.trim()
 
