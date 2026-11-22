@@ -51,6 +51,35 @@ const INSIGHT_TEMPLATES: Record<
     comparisonRecRise: string
   }
 > = {
+  ar: {
+    completenessTitle: (pct) => `اكتمال البيانات بنسبة ${pct}%`,
+    completenessDesc: (rows) =>
+      `جميع السجلات (${rows} صف) مكتملة دون أي قيم مفقودة، مما يضمن موثوقية عالية للقرارات المبنية على هذا التقرير.`,
+    concentrationTitle: (col) => `تركّز التوزيع حسب (${col})`,
+    concentrationDesc: (topCat, topCount, topPct, minCat, minCount) =>
+      `تستحوذ فئة '${topCat}' على الحصة الأكبر بواقع ${topCount} سجل (${topPct}% من الإجمالي)، بينما سجلت '${minCat}' الحد الأدنى (${minCount}).`,
+    concentrationRecHigh:
+      'التوصية: هناك اعتماد مرتفع على فئة واحدة؛ يُنصح بتوزيع الموارد أو تنويع المحفظة لتقليل مخاطر التركز.',
+    concentrationRecBalanced:
+      'التوصية: التوزيع متوازن نسبياً؛ ركّز على رفع أداء الفئات الأقل تمثيلاً.',
+    varianceTitle: (metric, col) => `تباين ${metric} حسب (${col})`,
+    varianceDesc: (topCat, topVal, pctDiff, metric, lowCat, lowVal) =>
+      `تتصدر فئة '${topCat}' بـ ${metric} يبلغ ${topVal} متفوقة بنسبة ${pctDiff}% على '${lowCat}' (${lowVal}).`,
+    varianceRec: (topCat) =>
+      `التوصية: دراسة عوامل التفوق في '${topCat}' وتعميم أفضل الممارسات لرفع أداء الفئات الأقل.`,
+    outlierTitle: (col) => `تفاوت حاد وقيم مرتفعة في (${col})`,
+    outlierDesc: (col, minVal, maxVal, avgVal, mult) =>
+      `يتراوح '${col}' بين ${minVal} و ${maxVal} بمتوسط ${avgVal} (أعلى قيمة تعادل ${mult} ضعف المتوسط).`,
+    outlierRec:
+      'التوصية: مراجعة السجلات ذات القيم القصوى للتحقق من كونها حالات استثنائية حقيقية أو أخطاء إدخال، واستخدام الوسيط (Median) بجانب المتوسط.',
+    comparisonTitle: (m1, m2) => `مقارنة الأداء بين (${m1}) و (${m2})`,
+    comparisonDesc: (isDrop, v1, m1, v2, m2, pct) =>
+      `${isDrop ? 'تراجع' : 'ارتفع'} المتوسط من ${v1} في '${m1}' إلى ${v2} في '${m2}' بنسبة ${isDrop ? 'انخفاض' : 'نمو'} ${pct}%.`,
+    comparisonRecDrop:
+      'التوصية: تحليل أسباب التراجع في الفئات الأقل أداءً ووضع خطة تصحيحية فورية.',
+    comparisonRecRise:
+      'التوصية: استثمار هذا الزخم الإيجابي وتعميم عوامل التحسن على بقية الفئات.',
+  },
   en: {
     completenessTitle: (pct) => `${pct}% Data Completeness`,
     completenessDesc: (rows) =>
@@ -310,7 +339,6 @@ export function formatLocalizedInsights(
   lang: string,
   dict: Record<string, string> = {}
 ): InsightItem[] {
-  if (lang === 'ar') return insights
   const T = INSIGHT_TEMPLATES[lang] ?? INSIGHT_TEMPLATES.en!
   const tr = (s: string): string =>
     dict[s.trim()] ?? dict[normalizeArabic(s.trim())] ?? s.trim()
@@ -321,10 +349,15 @@ export function formatLocalizedInsights(
     let title = ins.title
     let description = ins.description
 
-    // 1) اكتمال البيانات بنسبة 100%
-    const compPct = rawTitle.match(/اكتمال البيانات بنسبة\s*(\d+(?:\.\d+)?)%/)
-    const pctStr = compPct?.[1]
-    if (pctStr) {
+    // 1) اكتمال البيانات / Datenvollständigkeit / Data Completeness
+    const isCompleteness =
+      rawTitle.includes('اكتمال البيانات') ||
+      /Datenvollständigkeit|Data Completeness|integridad de datos|completezza dei dati|exhaustivité des données|Полнота данных|Veri Bütünlüğü/i.test(
+        ins.title
+      )
+    if (isCompleteness) {
+      const pctMatch = ins.title.match(/(\d+(?:\.\d+)?)%/)
+      const pctStr = pctMatch?.[1] ?? '100'
       title = T.completenessTitle(pctStr)
       const nums = rawDesc.match(/\d[\d,]*(?:\.\d+)?/g)
       const firstNum = nums?.[0]
@@ -334,11 +367,19 @@ export function formatLocalizedInsights(
       return { ...ins, title, description }
     }
 
-    // 2) تركز التوزيع حسب (العمود)
-    const concCol = rawTitle.match(/تركز التوزيع حسب\s*\(([^)]+)\)/)
-    const concColName = concCol?.[1]
-    if (concColName) {
-      title = T.concentrationTitle(tr(concColName))
+    // 2) تركز التوزيع / Konzentrationsmuster / Verteilungskonzentration / Distribution Concentration
+    const isConcentration =
+      rawTitle.includes('تركز التوزيع') ||
+      /Konzentrationsmuster|Verteilungskonzentration|Distribution Concentration|Concentración de distribución|Concentrazione della distribuzione|Concentration de la distribution|Концентрация распределения|Dağılım Yoğunluğu/i.test(
+        ins.title
+      )
+    if (isConcentration) {
+      const parenM = ins.title.match(/\(([^)]+)\)/)
+      const quoteM = ins.title.match(/'([^']+)'/)
+      const colRaw = parenM?.[1] ?? quoteM?.[1] ?? ''
+      if (colRaw) {
+        title = T.concentrationTitle(tr(colRaw))
+      }
       const quotes = Array.from(ins.description.matchAll(/'([^']+)'/g)).map((m) =>
         tr(m[1] ?? '')
       )
@@ -347,9 +388,12 @@ export function formatLocalizedInsights(
       const [n0, n1, n2] = nums
       if (q0 && q1 && n0 && n1 && n2) {
         const body = T.concentrationDesc(q0, n0, n1, q1, n2)
-        const rec = rawDesc.includes('اعتماد مرتفع')
-          ? T.concentrationRecHigh
-          : T.concentrationRecBalanced
+        const isHigh =
+          rawDesc.includes('اعتماد مرتفع') ||
+          /High dependency|Hohe Abhängigkeit|Alta dependencia|Elevata dipendenza|Forte dépendance|Высокая зависимость|yüksek bağımlılık/i.test(
+            ins.description
+          )
+        const rec = isHigh ? T.concentrationRecHigh : T.concentrationRecBalanced
         description = `${body} ${rec}`
       }
       return { ...ins, title, description }
@@ -404,7 +448,6 @@ export function formatLocalizedInsights(
       const quotes = Array.from(ins.description.matchAll(/'([^']+)'/g)).map((m) =>
         tr(m[1] ?? '')
       )
-      // إزالة الأرقام التي بداخل أسماء المقاييس مثل 2019 و 2020 قبل استخراج القيم الفعلية
       const descWithoutQuotes = rawDesc.replace(/'[^']+'/g, '')
       const nums = descWithoutQuotes.match(/-?\d[\d,]*(?:\.\d+)?/g) ?? []
       const [v1, v2, pct] = nums
