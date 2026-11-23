@@ -78,6 +78,31 @@ export default function DashboardPage() {
   useEffect(() => {
     if (roleLoading) return
 
+    let resolvedWsId = ''
+
+    function syncMembersFromLocal(wsId: string, apiMembers?: WorkspaceMemberItem[]) {
+      const removedKey = `insightflow_removed_members_${wsId}`
+      const removedEmails = new Set<string>(
+        JSON.parse(localStorage.getItem(removedKey) || '[]').map((e: string) => e.toLowerCase())
+      )
+      const savedTeam: WorkspaceMemberItem[] = JSON.parse(
+        localStorage.getItem(`insightflow_team_${wsId}`) || '[]'
+      )
+
+      const baseList =
+        apiMembers && apiMembers.length > 0
+          ? apiMembers
+          : Array.isArray(savedTeam)
+            ? savedTeam
+            : []
+
+      const filtered = baseList.filter(
+        (m) => !removedEmails.has((m.email || '').toLowerCase())
+      )
+
+      setMembers(filtered)
+    }
+
     async function loadWorkspaceOverview() {
       setLoading(true)
       try {
@@ -97,6 +122,8 @@ export default function DashboardPage() {
           setMembers([])
           return
         }
+
+        resolvedWsId = targetWsId
 
         const rawProjects = await apiRequest<any[]>(
           `/api/workspaces/${targetWsId}/projects`
@@ -132,7 +159,7 @@ export default function DashboardPage() {
               role: m.role || 'Viewer',
             }))
           : []
-        setMembers(mappedMembers)
+        syncMembersFromLocal(targetWsId, mappedMembers)
 
         const collectedDatasets: WorkspaceDataset[] = []
         for (const proj of mappedProjects) {
@@ -207,6 +234,14 @@ export default function DashboardPage() {
     }
 
     loadWorkspaceOverview()
+
+    const handleTeamUpdate = () => {
+      if (resolvedWsId) {
+        syncMembersFromLocal(resolvedWsId)
+      }
+    }
+    window.addEventListener('insightflow_team_updated', handleTeamUpdate)
+    return () => window.removeEventListener('insightflow_team_updated', handleTeamUpdate)
   }, [activeWorkspaceId, roleLoading])
 
   const totalRecords = useMemo(

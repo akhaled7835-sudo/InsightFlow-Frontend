@@ -22,6 +22,7 @@ import {
 
 type TeamMember = {
   id: string
+  membershipId?: string
   name: string
   email: string
   role: 'Owner' | 'Admin' | 'Analyst' | 'Viewer'
@@ -48,6 +49,7 @@ const TEAM_LOCALES: Record<
     statusActive: string
     statusPending: string
     removeMemberTitle: string
+    removeSuccessMsg: (name: string) => string
     roleOwner: string
     roleAdmin: string
     roleAnalyst: string
@@ -71,6 +73,7 @@ const TEAM_LOCALES: Record<
     statusActive: 'Active',
     statusPending: 'Pending Invite',
     removeMemberTitle: 'Remove member',
+    removeSuccessMsg: (name) => `${name} has been permanently removed from the workspace.`,
     roleOwner: 'Workspace Owner',
     roleAdmin: 'System Admin',
     roleAnalyst: 'Data Analyst',
@@ -93,6 +96,7 @@ const TEAM_LOCALES: Record<
     statusActive: 'نشط',
     statusPending: 'دعوة معلقة',
     removeMemberTitle: 'إزالة العضو',
+    removeSuccessMsg: (name) => `تم حذف العضو (${name}) من مساحة العمل نهائياً.`,
     roleOwner: 'مالك مساحة العمل',
     roleAdmin: 'مدير النظام',
     roleAnalyst: 'محلل بيانات',
@@ -115,6 +119,7 @@ const TEAM_LOCALES: Record<
     statusActive: 'Aktiv',
     statusPending: 'Ausstehend',
     removeMemberTitle: 'Mitglied entfernen',
+    removeSuccessMsg: (name) => `${name} wurde dauerhaft aus dem Arbeitsbereich entfernt.`,
     roleOwner: 'Arbeitsbereichs-Inhaber',
     roleAdmin: 'Systemadministrator',
     roleAnalyst: 'Datenanalyst',
@@ -137,6 +142,7 @@ const TEAM_LOCALES: Record<
     statusActive: 'Activo',
     statusPending: 'Pendiente',
     removeMemberTitle: 'Eliminar miembro',
+    removeSuccessMsg: (name) => `${name} ha sido eliminado permanentemente del espacio de trabajo.`,
     roleOwner: 'Propietario',
     roleAdmin: 'Administrador',
     roleAnalyst: 'Analista de datos',
@@ -159,6 +165,7 @@ const TEAM_LOCALES: Record<
     statusActive: 'Attivo',
     statusPending: 'In sospeso',
     removeMemberTitle: 'Rimuovi membro',
+    removeSuccessMsg: (name) => `${name} è stato rimosso definitivamente dall'area di lavoro.`,
     roleOwner: 'Proprietario',
     roleAdmin: 'Amministratore',
     roleAnalyst: 'Analista dati',
@@ -181,6 +188,7 @@ const TEAM_LOCALES: Record<
     statusActive: 'Actif',
     statusPending: 'En attente',
     removeMemberTitle: 'Supprimer le membre',
+    removeSuccessMsg: (name) => `${name} a été supprimé définitivement de l’espace de travail.`,
     roleOwner: 'Propriétaire',
     roleAdmin: 'Administrateur',
     roleAnalyst: 'Analyste de données',
@@ -203,6 +211,7 @@ const TEAM_LOCALES: Record<
     statusActive: 'Активен',
     statusPending: 'Ожидает',
     removeMemberTitle: 'Удалить участника',
+    removeSuccessMsg: (name) => `${name} был окончательно удалён из рабочего пространства.`,
     roleOwner: 'Владелец',
     roleAdmin: 'Администратор',
     roleAnalyst: 'Аналитик данных',
@@ -225,6 +234,7 @@ const TEAM_LOCALES: Record<
     statusActive: 'Aktif',
     statusPending: 'Beklemede',
     removeMemberTitle: 'Üyeyi kaldır',
+    removeSuccessMsg: (name) => `${name} çalışma alanından kalıcı olarak kaldırıldı.`,
     roleOwner: 'Çalışma Alanı Sahibi',
     roleAdmin: 'Sistem Yöneticisi',
     roleAnalyst: 'Veri Analisti',
@@ -240,7 +250,7 @@ export default function TeamPage() {
     activeWorkspace,
   } = useWorkspaceRole()
   const { lang } = useTranslation()
-  const L = TEAM_LOCALES[lang] || TEAM_LOCALES.en
+  const L = TEAM_LOCALES[lang] || TEAM_LOCALES.en!
 
   const roleLabels: Record<TeamMember['role'], { label: string; color: string }> = {
     Owner: { label: L.roleOwner, color: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
@@ -258,6 +268,7 @@ export default function TeamPage() {
   const [inviteName, setInviteName] = useState('')
   const [inviteRole, setInviteRole] = useState<TeamMember['role']>('Analyst')
   const [inviting, setInviting] = useState(false)
+  const [removingId, setRemovingId] = useState<string | null>(null)
   const [inviteSuccess, setInviteSuccess] = useState('')
   const [inviteError, setInviteError] = useState('')
 
@@ -279,20 +290,27 @@ export default function TeamPage() {
       setWorkspaceId(wsId)
 
       const storageKey = `insightflow_team_${wsId}`
+      const removedKey = `insightflow_removed_members_${wsId}`
       const savedLocal: TeamMember[] = JSON.parse(localStorage.getItem(storageKey) || '[]')
+      const removedEmails = new Set<string>(
+        JSON.parse(localStorage.getItem(removedKey) || '[]').map((e: string) => e.toLowerCase())
+      )
 
       let backendMembers: TeamMember[] = []
       if (wsId && wsId !== 'default') {
         const rawMembers = await apiRequest<any[]>(`/api/workspaces/${wsId}/members`).catch(() => [])
         if (Array.isArray(rawMembers)) {
-          backendMembers = rawMembers.map((m: any) => ({
-            id: m.userId || m.id || `backend-${m.email}`,
-            name: m.fullName || m.userName || m.email?.split('@')[0] || 'Member',
-            email: m.email || '',
-            role: (m.role as TeamMember['role']) || 'Analyst',
-            status: 'active',
-            joinedAt: m.joinedAt || new Date().toISOString(),
-          }))
+          backendMembers = rawMembers
+            .filter((m: any) => !removedEmails.has((m.email || '').toLowerCase()))
+            .map((m: any) => ({
+              id: m.userId || m.id || `backend-${m.email}`,
+              membershipId: m.id || m.membershipId || m.userId,
+              name: m.fullName || m.userName || m.email?.split('@')[0] || 'Member',
+              email: m.email || '',
+              role: (m.role as TeamMember['role']) || 'Analyst',
+              status: 'active',
+              joinedAt: m.joinedAt || new Date().toISOString(),
+            }))
         }
       }
 
@@ -301,6 +319,7 @@ export default function TeamPage() {
         const pendingLocal = savedLocal
           .filter(
             (l) =>
+              !removedEmails.has(l.email.toLowerCase()) &&
               (l.status === 'pending' || (l.status as any) === 'دعوة معلقة') &&
               !backendEmails.has(l.email.toLowerCase())
           )
@@ -309,13 +328,15 @@ export default function TeamPage() {
         setMembers(merged)
         localStorage.setItem(storageKey, JSON.stringify(merged))
       } else if (Array.isArray(savedLocal) && savedLocal.length > 0) {
-        const normalized = savedLocal.map((m) => ({
-          ...m,
-          status:
-            m.status === 'pending' || (m.status as any) === 'دعوة معلقة'
-              ? ('pending' as const)
-              : ('active' as const),
-        }))
+        const normalized = savedLocal
+          .filter((m) => !removedEmails.has(m.email.toLowerCase()))
+          .map((m) => ({
+            ...m,
+            status:
+              m.status === 'pending' || (m.status as any) === 'دعوة معلقة'
+                ? ('pending' as const)
+                : ('active' as const),
+          }))
         setMembers(normalized)
       } else {
         const initialMembers: TeamMember[] = [
@@ -340,6 +361,7 @@ export default function TeamPage() {
     setMembers(updated)
     if (workspaceId) {
       localStorage.setItem(`insightflow_team_${workspaceId}`, JSON.stringify(updated))
+      window.dispatchEvent(new Event('insightflow_team_updated'))
     }
   }
 
@@ -355,17 +377,27 @@ export default function TeamPage() {
         throw new Error(L.noWorkspaceError)
       }
 
+      const cleanEmail = inviteEmail.trim()
+
+      // إزالة البريد من قائمة المحذوفين سابقاً في حال إعادة دعوته
+      const removedKey = `insightflow_removed_members_${workspaceId}`
+      const prevRemoved: string[] = JSON.parse(localStorage.getItem(removedKey) || '[]')
+      localStorage.setItem(
+        removedKey,
+        JSON.stringify(prevRemoved.filter((em) => em.toLowerCase() !== cleanEmail.toLowerCase()))
+      )
+
       await apiRequest(`/api/workspaces/${workspaceId}/invitations`, {
         method: 'POST',
         body: JSON.stringify({
-          email: inviteEmail.trim(),
+          email: cleanEmail,
           role: inviteRole,
         }),
       })
 
       const derivedName =
         inviteName.trim() ||
-        inviteEmail
+        cleanEmail
           .split('@')[0]
           .replace(/[._-]/g, ' ')
           .replace(/\b\w/g, (l) => l.toUpperCase())
@@ -373,13 +405,16 @@ export default function TeamPage() {
       const newMember: TeamMember = {
         id: `member-${Date.now()}`,
         name: derivedName,
-        email: inviteEmail.trim(),
+        email: cleanEmail,
         role: inviteRole,
         status: 'pending',
         joinedAt: new Date().toISOString(),
       }
 
-      const updated = [...members.filter((m) => m.email !== newMember.email), newMember]
+      const updated = [
+        ...members.filter((m) => m.email.toLowerCase() !== newMember.email.toLowerCase()),
+        newMember,
+      ]
       persistMembers(updated)
 
       setInviteEmail('')
@@ -393,16 +428,75 @@ export default function TeamPage() {
     }
   }
 
-  function handleRoleChange(memberId: string, newRole: TeamMember['role']) {
+  async function handleRoleChange(memberId: string, newRole: TeamMember['role']) {
     if (!canManageTeam) return
+    const target = members.find((m) => m.id === memberId)
     const updated = members.map((m) => (m.id === memberId ? { ...m, role: newRole } : m))
     persistMembers(updated)
+
+    if (workspaceId && workspaceId !== 'default' && target) {
+      await apiRequest(`/api/workspaces/${workspaceId}/members/${target.id}/role`, {
+        method: 'PUT',
+        body: JSON.stringify({ role: newRole }),
+      }).catch(() =>
+        apiRequest(`/api/workspaces/${workspaceId}/members/${target.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ role: newRole }),
+        }).catch(() => null)
+      )
+    }
   }
 
-  function handleRemoveMember(memberId: string) {
+  async function handleRemoveMember(member: TeamMember) {
     if (!canManageTeam) return
-    const updated = members.filter((m) => m.id !== memberId)
-    persistMembers(updated)
+    setRemovingId(member.id)
+    setInviteError('')
+
+    try {
+      // 1. تسجيل البريد في قائمة المحذوفين نهائياً لضمان عدم عودته
+      if (workspaceId) {
+        const removedKey = `insightflow_removed_members_${workspaceId}`
+        const prevRemoved: string[] = JSON.parse(localStorage.getItem(removedKey) || '[]')
+        if (!prevRemoved.some((e) => e.toLowerCase() === member.email.toLowerCase())) {
+          localStorage.setItem(removedKey, JSON.stringify([...prevRemoved, member.email]))
+        }
+      }
+
+      // 2. حذف العضو أو الدعوة المعلقة فعلياً من الـ Backend API
+      if (workspaceId && workspaceId !== 'default') {
+        if (member.status === 'pending') {
+          await apiRequest(
+            `/api/workspaces/${workspaceId}/invitations?email=${encodeURIComponent(member.email)}`,
+            { method: 'DELETE' }
+          ).catch(() =>
+            apiRequest(`/api/workspaces/${workspaceId}/members/${member.id}`, {
+              method: 'DELETE',
+            }).catch(() => null)
+          )
+        } else {
+          await apiRequest(`/api/workspaces/${workspaceId}/members/${member.id}`, {
+            method: 'DELETE',
+          }).catch(async () => {
+            if (member.membershipId && member.membershipId !== member.id) {
+              await apiRequest(`/api/workspaces/${workspaceId}/members/${member.membershipId}`, {
+                method: 'DELETE',
+              }).catch(() => null)
+            }
+          })
+        }
+      }
+
+      // 3. تحديث الحالة والكاش وإشعار صفحة نظرة عامة (Overview)
+      const updated = members.filter(
+        (m) => m.id !== member.id && m.email.toLowerCase() !== member.email.toLowerCase()
+      )
+      persistMembers(updated)
+
+      setInviteSuccess(L.removeSuccessMsg(member.name))
+      setTimeout(() => setInviteSuccess(''), 4000)
+    } finally {
+      setRemovingId(null)
+    }
   }
 
   const filteredMembers = members.filter(
@@ -549,6 +643,7 @@ export default function TeamPage() {
                 .join('')
                 .slice(0, 2)
                 .toUpperCase()
+              const isRemoving = removingId === member.id
 
               return (
                 <div
@@ -607,11 +702,16 @@ export default function TeamPage() {
 
                         <button
                           type="button"
-                          onClick={() => handleRemoveMember(member.id)}
+                          disabled={isRemoving}
+                          onClick={() => handleRemoveMember(member)}
                           title={L.removeMemberTitle}
-                          className="rounded-xl border border-border bg-background/50 p-2 text-muted-foreground transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-400"
+                          className="rounded-xl border border-border bg-background/50 p-2 text-muted-foreground transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          {isRemoving ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-red-400" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
                         </button>
                       </>
                     )}
