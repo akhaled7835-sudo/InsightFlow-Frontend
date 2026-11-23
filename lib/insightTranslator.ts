@@ -367,10 +367,10 @@ export function formatLocalizedInsights(
       return { ...ins, title, description }
     }
 
-    // 2) تركز التوزيع / Konzentrationsmuster / Verteilungskonzentration / Distribution Concentration
+    // 2) تركز التوزيع / Concentration Pattern across '...' / Konzentrationsmuster
     const isConcentration =
       rawTitle.includes('تركز التوزيع') ||
-      /Konzentrationsmuster|Verteilungskonzentration|Distribution Concentration|Concentración de distribución|Concentrazione della distribuzione|Concentration de la distribution|Концентрация распределения|Dağılım Yoğunluğu/i.test(
+      /Concentration Pattern|Konzentrationsmuster|Verteilungskonzentration|Distribution Concentration|Concentración de distribución|Concentrazione della distribuzione|Concentration de la distribution|Концентрация распределения|Dağılım Yoğunluğu/i.test(
         ins.title
       )
     if (isConcentration) {
@@ -390,7 +390,7 @@ export function formatLocalizedInsights(
         const body = T.concentrationDesc(q0, n0, n1, q1, n2)
         const isHigh =
           rawDesc.includes('اعتماد مرتفع') ||
-          /High dependency|Hohe Abhängigkeit|Alta dependencia|Elevata dipendenza|Forte dépendance|Высокая зависимость|yüksek bağımlılık/i.test(
+          /High concentration|High dependency|Hohe Abhängigkeit|Alta dependencia|Elevata dipendenza|Forte dépendance|Высокая зависимость|yüksek bağımlılık/i.test(
             ins.description
           )
         const rec = isHigh ? T.concentrationRecHigh : T.concentrationRecBalanced
@@ -422,9 +422,10 @@ export function formatLocalizedInsights(
       return { ...ins, title, description }
     }
 
-    // 4) تفاوت حاد وقيم مرتفعة في (الراتب)
+    // 4) تفاوت حاد وقيم مرتفعة في (X) / High Variance & Upper Outliers in 'X'
     const outM = rawTitle.match(/تفاوت حاد وقيم مرتفعة في\s*\(([^)]+)\)/)
-    const outCol = outM?.[1]
+    const outEnM = ins.title.match(/High Variance\s*&\s*Upper Outliers in\s*'([^']+)'/i)
+    const outCol = outM?.[1] ?? outEnM?.[1]
     if (outCol) {
       const localizedCol = tr(outCol)
       title = T.outlierTitle(localizedCol)
@@ -437,10 +438,11 @@ export function formatLocalizedInsights(
       return { ...ins, title, description }
     }
 
-    // 5) مقارنة الأداء بين (PER 2019) و (PER 2020)
+    // 5) مقارنة الأداء بين (X) و (Y) / Period Shift: 'X' vs 'Y'
     const cmpM = rawTitle.match(/مقارنة الاداء بين\s*\(([^)]+)\)\s*و\s*\(([^)]+)\)/)
-    const m1 = cmpM?.[1]
-    const m2 = cmpM?.[2]
+    const cmpEnM = ins.title.match(/Period Shift:\s*'([^']+)'\s*vs\s*'([^']+)'/i)
+    const m1 = cmpM?.[1] ?? cmpEnM?.[1]
+    const m2 = cmpM?.[2] ?? cmpEnM?.[2]
     if (m1 && m2) {
       const lm1 = tr(m1)
       const lm2 = tr(m2)
@@ -451,7 +453,10 @@ export function formatLocalizedInsights(
       const descWithoutQuotes = rawDesc.replace(/'[^']+'/g, '')
       const nums = descWithoutQuotes.match(/-?\d[\d,]*(?:\.\d+)?/g) ?? []
       const [v1, v2, pct] = nums
-      const isDrop = rawDesc.includes('تراجع') || rawDesc.includes('انخفاض')
+      const isDrop =
+        rawDesc.includes('تراجع') ||
+        rawDesc.includes('انخفاض') ||
+        /declined|decreased|drop/i.test(ins.description)
       if (v1 && v2 && pct) {
         const body = T.comparisonDesc(
           isDrop,
@@ -459,7 +464,7 @@ export function formatLocalizedInsights(
           quotes[0] || lm1,
           v2,
           quotes[1] || lm2,
-          pct
+          pct.replace(/^-/, '')
         )
         const rec = isDrop ? T.comparisonRecDrop : T.comparisonRecRise
         description = `${body} ${rec}`

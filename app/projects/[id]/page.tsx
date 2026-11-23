@@ -654,13 +654,21 @@ export default function ProjectDashboardPage() {
         parseFloat(n.replace(/,/g, ''))
       )
 
-      if (title.startsWith('تباين') && quotes.length >= 2 && nums.length >= 3) {
+      const isVarianceOrShift =
+        title.startsWith('تباين') || /High Variance|Period Shift/i.test(title)
+
+      if (isVarianceOrShift && quotes.length >= 1 && nums.length >= 2) {
         const topLabel = quotes[0]!
-        const lowLabel = quotes[1]!
+        const lowLabel = quotes[1] ?? (lang === 'ar' ? 'المتوسط' : 'Average')
         const topVal = nums[0]!
-        const pctDiff = nums[1]!
-        const lowVal = nums[2]!
-        const changeStr = `+${pctDiff}%`
+        const lowVal = nums.length >= 3 ? nums[2]! : nums[1]!
+        const pctDiff =
+          nums.length >= 3
+            ? nums[1]!
+            : lowVal > 0
+              ? Math.round(((topVal - lowVal) / lowVal) * 100)
+              : 0
+        const changeStr = `${pctDiff >= 0 ? '+' : ''}${pctDiff}%`
 
         widgets.push({
           id: `comp-${idx}`,
@@ -704,7 +712,7 @@ export default function ProjectDashboardPage() {
         extractedBarsForDistribution.push({
           label: `${topLabel} vs ${lowLabel}`,
           value: topVal,
-          pct: Math.min(100, Math.round(pctDiff)),
+          pct: Math.min(100, Math.round(Math.abs(pctDiff))),
           isNegative: false,
         })
         return
@@ -713,7 +721,9 @@ export default function ProjectDashboardPage() {
       const isConcentration =
         title.includes('تركز') ||
         title.includes('تركّز') ||
-        /Konzentrationsmuster|Verteilungskonzentration|Distribution Concentration/i.test(title)
+        /Concentration Pattern|Konzentrationsmuster|Verteilungskonzentration|Distribution Concentration/i.test(
+          title
+        )
 
       if (isConcentration && quotes.length >= 1 && nums.length >= 2) {
         const primaryLabel = quotes[0]!
