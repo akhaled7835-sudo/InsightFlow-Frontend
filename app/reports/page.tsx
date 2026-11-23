@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, Suspense } from 'react'
+import { downloadExcelExecutiveDashboard } from '@/lib/exportExcelDashboard'
 import { useSearchParams } from 'next/navigation'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
 import { apiRequest } from '@/lib/api'
@@ -651,6 +652,24 @@ function ReportsContent() {
                         <Download className="h-3.5 w-3.5" />
                       )}
                       {isDownloading ? t.generatingReportBtn : t.downloadReportBtn}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        downloadExcelExecutiveDashboard({
+                          projectName: rep.projectName,
+                          fileName: rep.fileName,
+                          rowCount: actualRows,
+                          columnCount: rep.columnCount,
+                          lang,
+                          insights: displayedInsights,
+                        })
+                      }
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-3.5 py-2 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/25"
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5" />
+                      {lang === 'ar' ? 'تصدير داشبورد Excel' : 'Export Excel Dashboard'}
                     </button>
 
                     <Link
