@@ -432,7 +432,7 @@ export default function ProjectDashboardPage() {
       cachedFiles = []
     }
 
-    // 1. عرض فوري (0ms) من الكاش إن وجد بدون أي شاشة انتظار
+    // عرض فوري (0ms) من الكاش إن وجد بدون انتظار السيرفر
     if (Array.isArray(cachedFiles) && cachedFiles.length > 0 && !forceRefresh) {
       setDatasets(cachedFiles)
       setSelectedDatasetIndex(cachedFiles.length - 1)
@@ -448,13 +448,14 @@ export default function ProjectDashboardPage() {
         session?.workspaceId ||
         ''
 
-      const [projRes, remoteFilesRaw] = await Promise.all([
+      const [projRes, remoteFilesRaw, remoteDatasetsRaw] = await Promise.all([
         targetWsId
           ? apiRequest<any>(`/api/workspaces/${targetWsId}/projects/${projectId}`).catch(
               () => null
             )
           : Promise.resolve(null),
         apiRequest<any>(`/api/projects/${projectId}/files`).catch(() => []),
+        apiRequest<any>(`/api/projects/${projectId}/datasets`).catch(() => []),
       ])
 
       if (projRes && (projRes.id || projRes.name || projRes.title)) {
@@ -464,13 +465,21 @@ export default function ProjectDashboardPage() {
         })
       }
 
-      const remoteFiles = Array.isArray(remoteFilesRaw)
-        ? remoteFilesRaw
-        : Array.isArray(remoteFilesRaw?.items)
-          ? remoteFilesRaw.items
-          : Array.isArray(remoteFilesRaw?.files)
-            ? remoteFilesRaw.files
-            : []
+      const extractList = (raw: any): any[] => {
+        if (Array.isArray(raw)) return raw
+        if (Array.isArray(raw?.items)) return raw.items
+        if (Array.isArray(raw?.files)) return raw.files
+        if (Array.isArray(raw?.datasets)) return raw.datasets
+        if (Array.isArray(raw?.data)) return raw.data
+        return []
+      }
+
+      const remoteFiles = [
+        ...extractList(remoteFilesRaw),
+        ...extractList(remoteDatasetsRaw),
+        ...extractList(projRes?.files),
+        ...extractList(projRes?.datasets),
+      ]
 
       const cachedMap = new Map<string, any>(
         Array.isArray(cachedFiles)
