@@ -15,6 +15,12 @@ export const ACTIVE_WORKSPACE_KEY = 'insightflow_active_workspace_id'
 const WORKSPACE_OVERRIDES_KEY = 'insightflow_workspace_overrides'
 const WORKSPACE_LIST_CACHE_KEY = 'insightflow_workspaces_cache'
 
+// حالة مشتركة في الذاكرة لمنع التعليق وإعادة التحميل عند التنقل بين الصفحات
+let memoryWorkspaces: WorkspaceSummary[] = []
+let memoryActiveWorkspace: WorkspaceSummary | null = null
+let memoryRole: WorkspaceRole | null = null
+let inFlightPromise: Promise<void> | null = null
+
 export function getStoredActiveWorkspaceId(): string | null {
   if (typeof window === 'undefined') return null
   return localStorage.getItem(ACTIVE_WORKSPACE_KEY)
@@ -55,7 +61,7 @@ export async function saveWorkspaceOverride(
 ) {
   if (typeof window === 'undefined' || !workspaceId) return
 
-  // 1. حفظ التعديل محلياً فوراً
+  // 1. حفظ التعديل محلياً فوراً وبشكل دائم
   const current = getWorkspaceOverrides()
   current[workspaceId] = {
     ...(current[workspaceId] || {}),
@@ -63,7 +69,7 @@ export async function saveWorkspaceOverride(
   }
   localStorage.setItem(WORKSPACE_OVERRIDES_KEY, JSON.stringify(current))
 
-  // 2. تحديث القائمة المخبأة
+  // 2. تحديث القائمة المخبأة والذاكرة المشتركة فوراً
   try {
     const cachedRaw = JSON.parse(localStorage.getItem(WORKSPACE_LIST_CACHE_KEY) || '[]')
     if (Array.isArray(cachedRaw) && cachedRaw.length > 0) {
@@ -77,125 +83,223 @@ export async function saveWorkspaceOverride(
           : w
       )
       localStorage.setItem(WORKSPACE_LIST_CACHE_KEY, JSON.stringify(updatedCache))
+      memoryWorkspaces = updatedCache
+    }
+    if (memoryActiveWorkspace?.id === workspaceId) {
+      memoryActiveWorkspace = {
+        ...memoryActiveWorkspace,
+        name: data.name || memoryActiveWorkspace.name,
+        description:
+          data.description !== undefined ? data.description : memoryActiveWorkspace.description,
+      }
     }
   } catch {
     // ignore
   }
 
-  // 3. مزامنة الاسم الجديد مع الباك إند ليُحفظ في قاعدة البيانات نهائياً
-  try {
-    await apiRequest(`/api/workspaces/${workspaceId}`, {
-      method: 'PUT',
-      body: JSON.stringify({
-        name: data.name,
-        description: data.description,
+  // 3. محاولة حفظ الاسم في قاعدة البيانات بالباك إند بجميع الصيغ المحتملة
+  const payload = {
+    name: data.name,
+    Name: data.name,
+    description: data.description,
+    Description: data.description,
+  }
+
+  const attempts = [
+    () =>
+      apiRequest(`/api/workspaces/${workspaceId}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
       }),
-    })
-  } catch {
-    // إذا كان الباك إند لا يدعم PUT، يظل الحفظ المحلي فعالاً
+    () =>
+      apiRequest(`/api/workspaces/${workspaceId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }),
+    () =>
+      apiRequest(`/api/workspaces/${workspaceId}/rename`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      }),
+  ]
+
+  for (const run of attempts) {
+    try {
+      await run()
+      break
+    } catch {
+      // جرّب المسار التالي
+    }
   }
 
   // 4. إبلاغ جميع المكونات المفتوحة فوراً
   window.dispatchEvent(new Event('insightflow_workspace_updated'))
 }
 
-export function useWorkspaceRole() {
-  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
-  const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceSummary | null>(null)
-  const [role, setRole] = useState<WorkspaceRole | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  const fetchWorkspaceAndRole = useCallback(async () => {
-    try {
-      const session = getSession()
-      const myEmail = session?.email?.toLowerCase()
-      const overrides = getWorkspaceOverrides()
-
-      const applyOverrides = (list: any[]): WorkspaceSummary[] =>
-        list.map((w: any) => {
-          const id = w.id || w.workspaceId
-          const ov = overrides[id] || {}
-          return {
-            id,
-            name: ov.name || w.name || 'Workspace',
-            description: ov.description !== undefined ? ov.description : w.description,
-          }
-        })
-
-      // قراءة النسخة المخبأة فوراً
-      const cachedRaw = JSON.parse(localStorage.getItem(WORKSPACE_LIST_CACHE_KEY) || '[]')
-      if (Array.isArray(cachedRaw) && cachedRaw.length > 0) {
-        const cachedMapped = applyOverrides(cachedRaw)
-        setWorkspaces(cachedMapped)
-        const savedId = getStoredActiveWorkspaceId()
-        const preSelected = cachedMapped.find((w) => w.id === savedId) || cachedMapped[0]
-        if (preSelected) setActiveWorkspace(preSelected)
-      }
-
-      const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
-      let mappedList: WorkspaceSummary[] =
-        Array.isArray(wsList) && wsList.length > 0 ? applyOverrides(wsList) : []
-
-      if (mappedList.length === 0 && Array.isArray(cachedRaw) && cachedRaw.length > 0) {
-        mappedList = applyOverrides(cachedRaw)
-      } else if (mappedList.length === 0 && session?.workspaceId) {
-        mappedList = applyOverrides([
-          {
-            id: session.workspaceId,
-            name: 'Main Workspace',
-          },
-        ])
-      }
-
-      if (mappedList.length > 0) {
-        localStorage.setItem(WORKSPACE_LIST_CACHE_KEY, JSON.stringify(mappedList))
-      }
-
-      setWorkspaces(mappedList)
-
+function hydrateInitialFromCache(): {
+  workspaces: WorkspaceSummary[]
+  active: WorkspaceSummary | null
+  role: WorkspaceRole | null
+} {
+  if (memoryActiveWorkspace && memoryWorkspaces.length > 0) {
+    return {
+      workspaces: memoryWorkspaces,
+      active: memoryActiveWorkspace,
+      role: memoryRole || 'Owner',
+    }
+  }
+  if (typeof window === 'undefined') {
+    return { workspaces: [], active: null, role: null }
+  }
+  try {
+    const overrides = getWorkspaceOverrides()
+    const cachedRaw = JSON.parse(localStorage.getItem(WORKSPACE_LIST_CACHE_KEY) || '[]')
+    if (Array.isArray(cachedRaw) && cachedRaw.length > 0) {
+      const mapped = cachedRaw.map((w: any) => {
+        const id = w.id || w.workspaceId
+        const ov = overrides[id] || {}
+        return {
+          id,
+          name: ov.name || w.name || w.Name || 'Workspace',
+          description: ov.description !== undefined ? ov.description : w.description,
+        }
+      })
       const savedId = getStoredActiveWorkspaceId()
-      const selected = mappedList.find((w) => w.id === savedId) || mappedList[0] || null
-      setActiveWorkspace(selected)
+      const selected = mapped.find((w) => w.id === savedId) || mapped[0] || null
+      memoryWorkspaces = mapped
+      memoryActiveWorkspace = selected
+      return { workspaces: mapped, active: selected, role: 'Owner' }
+    }
+  } catch {
+    // ignore
+  }
+  return { workspaces: [], active: null, role: null }
+}
 
-      if (!selected?.id || selected.id === 'default') {
-        setRole('Owner')
+export function useWorkspaceRole() {
+  const initial = hydrateInitialFromCache()
+
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>(initial.workspaces)
+  const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceSummary | null>(initial.active)
+  const [role, setRole] = useState<WorkspaceRole | null>(initial.role)
+  const [loading, setLoading] = useState<boolean>(!initial.active)
+
+  const syncFromMemory = useCallback(() => {
+    if (memoryWorkspaces.length > 0) setWorkspaces(memoryWorkspaces)
+    if (memoryActiveWorkspace) setActiveWorkspace(memoryActiveWorkspace)
+    if (memoryRole) setRole(memoryRole)
+    setLoading(false)
+  }, [])
+
+  const fetchWorkspaceAndRole = useCallback(
+    async (force = false) => {
+      if (inFlightPromise && !force) {
+        await inFlightPromise
+        syncFromMemory()
         return
       }
 
-      setStoredActiveWorkspaceId(selected.id)
+      const task = (async () => {
+        try {
+          const session = getSession()
+          const myEmail = session?.email?.toLowerCase()
+          const overrides = getWorkspaceOverrides()
 
-      const members = await apiRequest<any[]>(`/api/workspaces/${selected.id}/members`).catch(
-        () => []
-      )
-      const me = Array.isArray(members)
-        ? members.find((m: any) => m.email?.toLowerCase() === myEmail)
-        : null
+          const applyOverrides = (list: any[]): WorkspaceSummary[] =>
+            list.map((w: any) => {
+              const id = w.id || w.workspaceId
+              const ov = overrides[id] || {}
+              return {
+                id,
+                name: ov.name || w.name || w.Name || 'Workspace',
+                description:
+                  ov.description !== undefined ? ov.description : w.description || w.Description,
+              }
+            })
 
-      if (me?.role) {
-        setRole(me.role as WorkspaceRole)
-      } else {
-        setRole('Owner')
-      }
-    } catch {
-      setRole('Owner')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+          const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => null)
+          let mappedList: WorkspaceSummary[] =
+            Array.isArray(wsList) && wsList.length > 0 ? applyOverrides(wsList) : []
+
+          if (mappedList.length === 0) {
+            const cachedRaw = JSON.parse(localStorage.getItem(WORKSPACE_LIST_CACHE_KEY) || '[]')
+            if (Array.isArray(cachedRaw) && cachedRaw.length > 0) {
+              mappedList = applyOverrides(cachedRaw)
+            } else if (session?.workspaceId) {
+              mappedList = applyOverrides([
+                {
+                  id: session.workspaceId,
+                  name: 'Main Workspace',
+                },
+              ])
+            }
+          }
+
+          if (mappedList.length > 0) {
+            localStorage.setItem(WORKSPACE_LIST_CACHE_KEY, JSON.stringify(mappedList))
+            memoryWorkspaces = mappedList
+            setWorkspaces(mappedList)
+          }
+
+          const savedId = getStoredActiveWorkspaceId()
+          const selected = mappedList.find((w) => w.id === savedId) || mappedList[0] || null
+          memoryActiveWorkspace = selected
+          setActiveWorkspace(selected)
+
+          if (!selected?.id || selected.id === 'default') {
+            memoryRole = 'Owner'
+            setRole('Owner')
+            return
+          }
+
+          setStoredActiveWorkspaceId(selected.id)
+
+          const members = await apiRequest<any[]>(`/api/workspaces/${selected.id}/members`).catch(
+            () => null
+          )
+          const me = Array.isArray(members)
+            ? members.find((m: any) => m.email?.toLowerCase() === myEmail)
+            : null
+
+          const resolvedRole = (me?.role as WorkspaceRole) || 'Owner'
+          memoryRole = resolvedRole
+          setRole(resolvedRole)
+        } catch {
+          if (!memoryRole) {
+            memoryRole = 'Owner'
+            setRole('Owner')
+          }
+        } finally {
+          inFlightPromise = null
+          setLoading(false)
+        }
+      })()
+
+      inFlightPromise = task
+      await task
+    },
+    [syncFromMemory]
+  )
 
   useEffect(() => {
-    fetchWorkspaceAndRole()
+    fetchWorkspaceAndRole(false)
 
     const onWorkspaceUpdated = () => {
-      fetchWorkspaceAndRole()
+      syncFromMemory()
+      fetchWorkspaceAndRole(true)
     }
     window.addEventListener('insightflow_workspace_updated', onWorkspaceUpdated)
     return () => window.removeEventListener('insightflow_workspace_updated', onWorkspaceUpdated)
-  }, [fetchWorkspaceAndRole])
+  }, [fetchWorkspaceAndRole, syncFromMemory])
 
   function switchWorkspace(workspaceId: string) {
     setStoredActiveWorkspaceId(workspaceId)
-    window.location.reload()
+    const found = memoryWorkspaces.find((w) => w.id === workspaceId) || null
+    if (found) {
+      memoryActiveWorkspace = found
+      setActiveWorkspace(found)
+    }
+    window.dispatchEvent(new Event('insightflow_workspace_updated'))
   }
 
   const isOwner = role === 'Owner'
@@ -208,7 +312,7 @@ export function useWorkspaceRole() {
     activeWorkspace,
     activeWorkspaceId: activeWorkspace?.id || '',
     switchWorkspace,
-    refreshWorkspace: fetchWorkspaceAndRole,
+    refreshWorkspace: () => fetchWorkspaceAndRole(true),
     role,
     loading,
     isOwner,

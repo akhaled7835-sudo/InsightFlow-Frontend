@@ -2,6 +2,7 @@
 export const TOKEN_KEY = "insightflow_token";
 export const SESSION_KEY = "insightflow_session";
 export const LANG_KEY = "insightflow_lang";
+
 export interface AuthSession {
   token: string;
   userId?: string;
@@ -48,6 +49,37 @@ export class ApiError extends Error {
   }
 }
 
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  retries = 2
+): Promise<Response> {
+  const method = (options.method || "GET").toUpperCase();
+  const canRetry = method === "GET" || method === "POST";
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      if (
+        canRetry &&
+        attempt < retries &&
+        (res.status === 502 || res.status === 503 || res.status === 504 || res.status === 408)
+      ) {
+        await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+  return fetch(url, options);
+}
+
 export async function apiRequest<T>(
   path: string,
   options: RequestInit = {}
@@ -69,7 +101,7 @@ export async function apiRequest<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await fetchWithRetry(`${API_BASE_URL}${path}`, {
     ...options,
     headers,
   });
