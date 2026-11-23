@@ -14,14 +14,9 @@ import {
   Check,
   X,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from '@/lib/i18n'
-
-const workspaces = [
-  { name: 'Acme Analytics', plan: 'Enterprise' },
-  { name: 'Northwind Co.', plan: 'Pro' },
-  { name: 'Personal', plan: 'Starter' },
-]
+import { useWorkspaceRole } from '@/lib/useWorkspaceRole'
 
 export function Sidebar({
   onClose,
@@ -33,15 +28,22 @@ export function Sidebar({
   const [wsOpen, setWsOpen] = useState(false)
   const [active, setActive] = useState(activeItem)
   const { t } = useTranslation()
+  const { workspaces, activeWorkspace, activeWorkspaceId, switchWorkspace } = useWorkspaceRole()
+
+  useEffect(() => {
+    setActive(activeItem)
+  }, [activeItem])
 
   const nav = [
     { id: 'overview', label: t.overview, href: '/dashboard', icon: LayoutDashboard },
     { id: 'analytics', label: t.analytics, href: '/analytics', icon: BarChart3 },
-    { id: 'projects', label: t.projects, href: '/projects', icon: FolderKanban, badge: '8' },
+    { id: 'projects', label: t.projects, href: '/projects', icon: FolderKanban },
     { id: 'dataFiles', label: t.dataFiles, href: '/upload', icon: FileSpreadsheet },
     { id: 'aiReports', label: t.aiReports, href: '/reports', icon: Sparkles, badge: 'AI' },
     { id: 'team', label: t.team, href: '/team', icon: Users },
   ]
+
+  const currentWsName = activeWorkspace?.name || 'Acme Analytics'
 
   return (
     <div className="flex h-full flex-col gap-1 bg-card/40 p-4">
@@ -65,34 +67,38 @@ export function Sidebar({
 
       <div className="relative mb-3">
         <button
+          type="button"
           onClick={() => setWsOpen((o) => !o)}
           className="flex w-full items-center gap-3 rounded-xl border border-border bg-background/60 p-3 text-start transition-colors hover:border-primary/40"
         >
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-sm font-semibold text-primary">
-            A
+            {currentWsName.charAt(0).toUpperCase()}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium">Acme Analytics</span>
+            <span className="block truncate text-sm font-medium">{currentWsName}</span>
             <span className="block text-xs text-muted-foreground">{t.proWorkspace}</span>
           </span>
           <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
         </button>
-        {wsOpen && (
+        {wsOpen && workspaces.length > 0 && (
           <div className="absolute z-20 mt-2 w-full rounded-xl border border-border bg-popover p-1.5 shadow-2xl shadow-black/40">
-            {workspaces.map((ws, i) => (
+            {workspaces.map((ws) => (
               <button
-                key={ws.name}
-                onClick={() => setWsOpen(false)}
+                key={ws.id}
+                type="button"
+                onClick={() => {
+                  switchWorkspace(ws.id)
+                  setWsOpen(false)
+                }}
                 className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-start text-sm hover:bg-secondary"
               >
                 <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/15 text-xs font-semibold text-primary">
-                  {ws.name.charAt(0)}
+                  {ws.name.charAt(0).toUpperCase()}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{ws.name}</span>
-                  <span className="block text-xs text-muted-foreground">{ws.plan}</span>
                 </span>
-                {i === 0 && <Check className="h-4 w-4 text-primary" />}
+                {ws.id === activeWorkspaceId && <Check className="h-4 w-4 text-primary" />}
               </button>
             ))}
           </div>

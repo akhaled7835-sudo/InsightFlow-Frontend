@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Sparkles,
@@ -29,11 +29,6 @@ type WorkspaceDatasetSummary = {
   statisticalFacts: string[]
 }
 
-type WorkspaceProjectSummary = {
-  id: string
-  name: string
-}
-
 type SavedReportSummary = {
   id: string
   title: string
@@ -48,6 +43,18 @@ type ChatMessage = {
   text: string
   sources?: Array<{ title: string; url: string }>
 }
+
+// ذاكرة مشتركة للشريط الجانبي لمنع إعادة تحميل عشرات الطلبات عند التنقل بين الصفحات
+const sidebarMemoryCache: Record<
+  string,
+  {
+    emptyProjectsCount: number
+    membersCount: number
+    datasets: WorkspaceDatasetSummary[]
+    recentReports: SavedReportSummary[]
+    timestamp: number
+  }
+> = {}
 
 const SIDEBAR_LOCALES: Record<
   string,
@@ -362,186 +369,157 @@ function FormattedChatText({ text }: { text: string }) {
 export function RightSidebar() {
   const router = useRouter()
   const { t, lang } = useTranslation()
-  const L = SIDEBAR_LOCALES[lang] || SIDEBAR_LOCALES.en
+  const L = SIDEBAR_LOCALES[lang] || SIDEBAR_LOCALES.en!
   const currentLangObj =
-    SUPPORTED_LANGUAGES.find((l) => l.code === lang) || SUPPORTED_LANGUAGES[0]
+    SUPPORTED_LANGUAGES.find((l) => l.code === lang) || SUPPORTED_LANGUAGES[0]!
 
   const {
     activeWorkspaceId,
     activeWorkspace,
     canAnalyzeAndUpload,
     canManageTeam,
-    loading: roleLoading,
   } = useWorkspaceRole()
 
-  const [projects, setProjects] = useState<WorkspaceProjectSummary[]>([])
   const [emptyProjectsCount, setEmptyProjectsCount] = useState(0)
   const [membersCount, setMembersCount] = useState(1)
   const [datasets, setDatasets] = useState<WorkspaceDatasetSummary[]>([])
   const [recentReports, setRecentReports] = useState<SavedReportSummary[]>([])
-  const [dataLoading, setDataLoading] = useState(true)
+  const [dataLoading, setDataLoading] = useState(false)
 
   const [inputValue, setInputValue] = useState('')
   const [isThinking, setIsThinking] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const mountedRef = useRef(true)
 
   useEffect(() => {
-    if (roleLoading) return
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
-    async function loadSidebarContext() {
+  useEffect(() => {
+    const session = getSession()
+    const wsId =
+      (activeWorkspaceId && activeWorkspaceId !== 'default' ? activeWorkspaceId : '') ||
+      session?.workspaceId ||
+      ''
+    const wsLabel = activeWorkspace?.name || 'Workspace'
+
+    if (!wsId) {
+      setMessages([{ id: 'welcome', sender: 'ai', text: L.welcomeEmpty(wsLabel) }])
+      return
+    }
+
+    // 1. إذا كانت البيانات في الذاكرة حديثة (أقل من 45 ثانية)، نستخدمها فوراً بدون أي طلب شبكة
+    const cachedMem = sidebarMemoryCache[wsId]
+    if (cachedMem && Date.now() - cachedMem.timestamp < 45000) {
+      setEmptyProjectsCount(cachedMem.emptyProjectsCount)
+      setMembersCount(cachedMem.membersCount)
+      setDatasets(cachedMem.datasets)
+      setRecentReports(cachedMem.recentReports)
+      const totalRows = cachedMem.datasets.reduce((sum, d) => sum + d.rowCount, 0)
+      const introText =
+        cachedMem.datasets.length > 0
+          ? L.welcomeWithFiles(wsLabel, cachedMem.datasets.length, totalRows.toLocaleString(lang))
+          : L.welcomeEmpty(wsLabel)
+      setMessages((prev) =>
+        prev.length > 1 ? prev : [{ id: 'welcome', sender: 'ai', text: introText }]
+      )
+      return
+    }
+
+    // 2. قراءة فورية من localStorage أولاً حتى لا يتعطل الشريط الجانبي أو يستهلك الشبكة
+    async function loadSidebarLightweight() {
       setDataLoading(true)
       try {
-        const session = getSession()
-        let wsId = activeWorkspaceId || session?.workspaceId
-        if (!wsId) {
-          const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
-          const firstWs = wsList?.[0]
-          wsId = firstWs?.id || firstWs?.workspaceId
-        }
-
-        if (!wsId || wsId === 'default') {
-          setProjects([])
-          setDatasets([])
-          setRecentReports([])
-          setDataLoading(false)
-          return
-        }
-
-        const [rawProjects, rawMembers] = await Promise.all([
-          apiRequest<any[]>(`/api/workspaces/${wsId}/projects`).catch(() => []),
-          apiRequest<any[]>(`/api/workspaces/${wsId}/members`).catch(() => []),
-        ])
-
-        const projList = Array.isArray(rawProjects) ? rawProjects : []
-        setProjects(
-          projList.map((p: any) => ({
-            id: p.id || p.projectId,
-            name: p.name || 'Project',
-          }))
+        const cachedProjsRaw = JSON.parse(
+          localStorage.getItem(`insightflow_projects_cache_${wsId}`) || '[]'
         )
-        setMembersCount(Array.isArray(rawMembers) && rawMembers.length > 0 ? rawMembers.length : 1)
+        const projList =
+          Array.isArray(cachedProjsRaw) && cachedProjsRaw.length > 0
+            ? cachedProjsRaw
+            : await apiRequest<any[]>(`/api/workspaces/${wsId}/projects`).catch(() => [])
+
+        if (!mountedRef.current) return
 
         const uniqueDatasetsMap = new Map<string, WorkspaceDatasetSummary>()
         const collectedReports: SavedReportSummary[] = []
         let emptyProjs = 0
 
-        for (const p of projList) {
+        for (const p of Array.isArray(projList) ? projList : []) {
           const pid = p.id || p.projectId
-          const pname = p.name || 'Project'
+          const pname = p.name || p.title || 'Project'
           if (!pid) continue
 
-          const storageKey = `insightflow_project_files_${pid}`
-          const cached = JSON.parse(localStorage.getItem(storageKey) || '[]')
-          const remoteFiles = await apiRequest<any[]>(`/api/projects/${pid}/files`).catch(() => [])
-
-          const cachedMap = new Map<string, any>(
-            Array.isArray(cached)
-              ? cached.flatMap((c: any) => [
-                  [c.id, c],
-                  [c.name, c],
-                ])
-              : []
+          const cachedFiles = JSON.parse(
+            localStorage.getItem(`insightflow_project_files_${pid}`) || '[]'
           )
 
-          const filesSource =
-            Array.isArray(remoteFiles) && remoteFiles.length > 0 ? remoteFiles : cached
-
-          if (Array.isArray(filesSource) && filesSource.length > 0) {
-            for (const rf of filesSource) {
-              const dsId = rf.datasetId || rf.fileId || rf.id
-              const fname = rf.fileName || rf.originalFileName || rf.name || 'Dataset'
-              const localMatch = cachedMap.get(dsId) || cachedMap.get(fname)
-              const dedupKey = `${pid}::${fname}`
-
-              let insightsArr: any[] = Array.isArray(localMatch?.insights)
-                ? localMatch.insights
-                : []
-
-              if (insightsArr.length === 0 && dsId) {
-                const insRes = await apiRequest<any>(
-                  `/api/analytics/datasets/${dsId}/insights`,
-                  {
-                    method: 'POST',
-                    body: JSON.stringify({
-                      metrics: [],
-                      groupBy: [],
-                      filters: [],
-                      comparisons: [],
-                    }),
-                  }
-                ).catch(() => null)
-                insightsArr = insRes?.insights || insRes?.Insights || []
-              }
-
+          if (Array.isArray(cachedFiles) && cachedFiles.length > 0) {
+            for (const f of cachedFiles) {
+              const fname = f.name || f.fileName || 'Dataset'
+              const insightsArr = Array.isArray(f.insights) ? f.insights : []
               const statisticalFacts = insightsArr.map(
                 (i: any) =>
                   `${i.title || i.Title}: ${(i.description || i.Description || '').split(/التوصية:|Recommendation:|Empfehlung:/)[0].trim()}`
               )
-
-              uniqueDatasetsMap.set(dedupKey, {
+              uniqueDatasetsMap.set(`${pid}::${fname}`, {
                 projectId: pid,
                 projectName: pname,
-                datasetId: dsId,
+                datasetId: f.id || f.datasetId || '',
                 fileName: fname,
-                rowCount: rf.rowCount ?? localMatch?.rowCount ?? 0,
-                columnCount: rf.columnCount ?? localMatch?.columnCount ?? 0,
-                uploadedAt: rf.uploadedAt || localMatch?.uploadedAt,
-                columnNames: localMatch?.columnNames || [],
-                sampleRows: localMatch?.sampleRows || [],
+                rowCount: f.rowCount ?? 0,
+                columnCount: f.columnCount ?? 0,
+                uploadedAt: f.uploadedAt,
+                columnNames: f.columnNames || [],
+                sampleRows: f.sampleRows || [],
                 statisticalFacts,
               })
             }
           } else {
             emptyProjs++
           }
-
-          const projReports = await apiRequest<any[]>(`/api/projects/${pid}/reports`).catch(
-            () => []
-          )
-          if (Array.isArray(projReports)) {
-            projReports.forEach((rep: any) => {
-              collectedReports.push({
-                id: rep.reportId || rep.id,
-                title: rep.title || 'Report',
-                projectName: pname,
-                createdAt: rep.createdAt || new Date().toISOString(),
-                type: rep.reportType || 'Summary',
-              })
-            })
-          }
         }
 
         const collectedDatasets = Array.from(uniqueDatasetsMap.values())
+
+        sidebarMemoryCache[wsId] = {
+          emptyProjectsCount: emptyProjs,
+          membersCount: 1,
+          datasets: collectedDatasets,
+          recentReports: collectedReports,
+          timestamp: Date.now(),
+        }
+
+        if (!mountedRef.current) return
         setEmptyProjectsCount(emptyProjs)
         setDatasets(collectedDatasets)
-        collectedReports.sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        )
-        setRecentReports(collectedReports.slice(0, 3))
+        setRecentReports(collectedReports)
 
         const totalRows = collectedDatasets.reduce((sum, d) => sum + d.rowCount, 0)
-        const wsLabel = activeWorkspace?.name || 'Workspace'
         const introText =
           collectedDatasets.length > 0
             ? L.welcomeWithFiles(wsLabel, collectedDatasets.length, totalRows.toLocaleString(lang))
             : L.welcomeEmpty(wsLabel)
 
-        setMessages([{ id: 'welcome', sender: 'ai', text: introText }])
-      } catch (err) {
-        console.error('RightSidebar context error:', err)
+        setMessages((prev) =>
+          prev.length > 1 ? prev : [{ id: 'welcome', sender: 'ai', text: introText }]
+        )
       } finally {
-        setDataLoading(false)
+        if (mountedRef.current) setDataLoading(false)
       }
     }
 
-    loadSidebarContext()
-  }, [activeWorkspaceId, activeWorkspace?.name, roleLoading, lang])
+    loadSidebarLightweight()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkspaceId, activeWorkspace?.name, lang])
 
   const smartSuggestions = useMemo(() => {
     if (datasets.length === 0) {
       return [L.sugNoData1, L.sugNoData2]
     }
-    const latestFile = datasets[datasets.length - 1]
+    const latestFile = datasets[datasets.length - 1]!
     return [L.sugFile(latestFile.fileName), L.sugPatterns, L.sugActions]
   }, [datasets, L])
 
@@ -597,7 +575,15 @@ export function RightSidebar() {
     }
 
     return list.slice(0, 3)
-  }, [emptyProjectsCount, datasets.length, recentReports.length, membersCount, canAnalyzeAndUpload, canManageTeam, L])
+  }, [
+    emptyProjectsCount,
+    datasets.length,
+    recentReports.length,
+    membersCount,
+    canAnalyzeAndUpload,
+    canManageTeam,
+    L,
+  ])
 
   async function handleSendQuestion(questionText?: string) {
     const q = (questionText ?? inputValue).trim()

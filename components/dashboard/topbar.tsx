@@ -3,7 +3,7 @@
 import { Search, Menu, LogOut, Clock, Building2, Plus, X, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { clearSession, getSession, apiRequest, API_BASE_URL, type AuthSession } from '@/lib/api'
+import { clearSession, getSession, apiRequest, type AuthSession } from '@/lib/api'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { useTranslation } from '@/lib/i18n'
 import { useWorkspaceRole, setStoredActiveWorkspaceId } from '@/lib/useWorkspaceRole'
@@ -24,6 +24,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
     activeWorkspace,
     activeWorkspaceId,
     switchWorkspace,
+    refreshWorkspace,
     role,
     loading: wsLoading,
   } = useWorkspaceRole()
@@ -36,7 +37,6 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
 
   useEffect(() => {
     setSession(getSession())
-    fetch(`${API_BASE_URL}/swagger/index.html`, { mode: 'no-cors' }).catch(() => {})
   }, [])
 
   function handleLogout() {
@@ -64,7 +64,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
       setShowCreateModal(false)
       setNewWsName('')
       setNewWsDesc('')
-      window.location.reload()
+      await refreshWorkspace()
     } catch (err: any) {
       setCreateError(err?.message || 'فشل إنشاء مساحة العمل الجديدة.')
     } finally {
