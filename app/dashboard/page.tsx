@@ -81,74 +81,58 @@ export default function DashboardPage() {
     async function loadWorkspaceOverview() {
       setLoading(true)
       try {
-        const wsIds = new Set<string>()
-        if (activeWorkspaceId && activeWorkspaceId !== 'default') wsIds.add(activeWorkspaceId)
-        if (session?.workspaceId && session.workspaceId !== 'default') wsIds.add(session.workspaceId)
+        let targetWsId =
+          activeWorkspaceId && activeWorkspaceId !== 'default' ? activeWorkspaceId : ''
 
-        const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
-        if (Array.isArray(wsList)) {
-          wsList.forEach((w) => {
-            const id = w?.id || w?.workspaceId
-            if (id && id !== 'default') wsIds.add(id)
-          })
+        if (!targetWsId) {
+          const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
+          if (Array.isArray(wsList) && wsList.length > 0) {
+            targetWsId = wsList[0]?.id || wsList[0]?.workspaceId || ''
+          }
         }
 
-        const primaryWsId =
-          (activeWorkspaceId && activeWorkspaceId !== 'default' ? activeWorkspaceId : null) ||
-          Array.from(wsIds)[0]
+        if (!targetWsId) {
+          setProjects([])
+          setDatasets([])
+          setMembers([])
+          return
+        }
 
-        const projectMap = new Map<string, WorkspaceProject>()
-        for (const wsId of wsIds) {
-          const rawProjects = await apiRequest<any[]>(`/api/workspaces/${wsId}/projects`).catch(
-            () => []
-          )
-          if (Array.isArray(rawProjects)) {
-            rawProjects.forEach((p: any) => {
-              const pid = p.id || p.projectId
-              if (pid) {
-                projectMap.set(pid, {
+        const rawProjects = await apiRequest<any[]>(
+          `/api/workspaces/${targetWsId}/projects`
+        ).catch(() => [])
+
+        const mappedProjects: WorkspaceProject[] = Array.isArray(rawProjects)
+          ? rawProjects
+              .map((p: any) => {
+                const pid = p.id || p.projectId
+                if (!pid) return null
+                const resolvedName =
+                  p.name || p.title || p.projectName || p.Name || p.Title || 'Untitled Project'
+                return {
                   id: pid,
-                  name: p.name || 'Untitled Project',
-                  description: p.description,
-                  createdAt: p.createdAt,
-                })
-              }
-            })
-          }
-        }
+                  name: resolvedName,
+                  description: p.description || p.Description,
+                  createdAt: p.createdAt || p.CreatedAt,
+                }
+              })
+              .filter(Boolean) as WorkspaceProject[]
+          : []
 
-        // التقاط أي مشاريع مخزنة محلياً في المتصفح
-        if (typeof window !== 'undefined') {
-          for (let i = 0; i < localStorage.length; i++) {
-            const k = localStorage.key(i)
-            if (k && k.startsWith('insightflow_project_files_')) {
-              const pid = k.replace('insightflow_project_files_', '')
-              if (pid && !projectMap.has(pid)) {
-                projectMap.set(pid, { id: pid, name: 'Project' })
-              }
-            }
-          }
-        }
-
-        const mappedProjects = Array.from(projectMap.values())
         setProjects(mappedProjects)
 
-        if (primaryWsId) {
-          const rawMembers = await apiRequest<any[]>(
-            `/api/workspaces/${primaryWsId}/members`
-          ).catch(() => [])
-          const mappedMembers: WorkspaceMemberItem[] = Array.isArray(rawMembers)
-            ? rawMembers.map((m: any) => ({
-                id: m.userId || m.id || m.email,
-                name: m.fullName || m.userName || m.email?.split('@')[0] || 'Member',
-                email: m.email || '',
-                role: m.role || 'Viewer',
-              }))
-            : []
-          setMembers(mappedMembers)
-        } else {
-          setMembers([])
-        }
+        const rawMembers = await apiRequest<any[]>(
+          `/api/workspaces/${targetWsId}/members`
+        ).catch(() => [])
+        const mappedMembers: WorkspaceMemberItem[] = Array.isArray(rawMembers)
+          ? rawMembers.map((m: any) => ({
+              id: m.userId || m.id || m.email,
+              name: m.fullName || m.userName || m.email?.split('@')[0] || 'Member',
+              email: m.email || '',
+              role: m.role || 'Viewer',
+            }))
+          : []
+        setMembers(mappedMembers)
 
         const collectedDatasets: WorkspaceDataset[] = []
         for (const proj of mappedProjects) {
@@ -223,7 +207,7 @@ export default function DashboardPage() {
     }
 
     loadWorkspaceOverview()
-  }, [activeWorkspaceId, roleLoading, session?.workspaceId])
+  }, [activeWorkspaceId, roleLoading])
 
   const totalRecords = useMemo(
     () => datasets.reduce((acc, d) => acc + d.rowCount, 0),
@@ -235,7 +219,10 @@ export default function DashboardPage() {
     const all: Array<{ title: string; description: string; fileName: string; projectId: string }> = []
     datasets.forEach((ds) => {
       ds.insights.forEach((ins) => {
-        if (!ins.title?.includes('اكتمال البيانات')) {
+        if (
+          !ins.title?.includes('اكتمال البيانات') &&
+          !/Data Completeness|Datenvollständigkeit/i.test(ins.title || '')
+        ) {
           all.push({
             title: ins.title,
             description: ins.description,

@@ -412,33 +412,39 @@ function UploadPageContent() {
 
     async function loadContext() {
       try {
-        const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
-        const wsIds = new Set<string>()
-        if (activeWorkspaceId && activeWorkspaceId !== 'default') wsIds.add(activeWorkspaceId)
-        if (Array.isArray(wsList)) {
-          wsList.forEach((w) => {
-            const id = w?.id || w?.workspaceId
-            if (id && id !== 'default') wsIds.add(id)
-          })
-        }
+        let targetWsId =
+          activeWorkspaceId && activeWorkspaceId !== 'default' ? activeWorkspaceId : ''
 
-        const firstWsId = Array.from(wsIds)[0] || ''
-        if (firstWsId) setWorkspaceId(firstWsId)
-
-        const allProjects: Array<{ id: string; name: string }> = []
-        for (const wId of wsIds) {
-          const projList = await apiRequest<any[]>(`/api/workspaces/${wId}/projects`).catch(
-            () => []
-          )
-          if (Array.isArray(projList)) {
-            projList.forEach((p) => {
-              const pid = p.id || p.projectId
-              if (pid && !allProjects.some((existing) => existing.id === pid)) {
-                allProjects.push({ id: pid, name: p.name || 'Project' })
-              }
-            })
+        if (!targetWsId) {
+          const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
+          if (Array.isArray(wsList) && wsList.length > 0) {
+            targetWsId = wsList[0]?.id || wsList[0]?.workspaceId || ''
           }
         }
+
+        if (!targetWsId) {
+          setWorkspaceId('')
+          setProjects([])
+          setSelectedProjectId('')
+          return
+        }
+
+        setWorkspaceId(targetWsId)
+        const projList = await apiRequest<any[]>(`/api/workspaces/${targetWsId}/projects`).catch(
+          () => []
+        )
+
+        const allProjects: Array<{ id: string; name: string }> = Array.isArray(projList)
+          ? projList
+              .map((p: any) => {
+                const pid = p.id || p.projectId
+                if (!pid) return null
+                const pname =
+                  p.name || p.title || p.projectName || p.Name || p.Title || 'Untitled Project'
+                return { id: pid, name: pname }
+              })
+              .filter(Boolean) as Array<{ id: string; name: string }>
+          : []
 
         if (allProjects.length > 0) {
           setProjects(allProjects)

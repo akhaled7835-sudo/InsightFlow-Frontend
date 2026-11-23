@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState, Suspense, useRef } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
-import { apiRequest, getSession } from '@/lib/api'
+import { apiRequest } from '@/lib/api'
 import { useWorkspaceRole } from '@/lib/useWorkspaceRole'
 import { useTranslation, SUPPORTED_LANGUAGES } from '@/lib/i18n'
 import { extractArabicTokens, formatLocalizedInsights } from '@/lib/insightTranslator'
@@ -33,66 +33,6 @@ type ProjectReportItem = {
   insights: Array<{ title: string; description: string; severity?: string }>
 }
 
-function readCachedReportsFromStorage(): {
-  cachedProjects: Array<{ id: string; name: string }>
-  cachedReports: ProjectReportItem[]
-} {
-  if (typeof window === 'undefined') {
-    return { cachedProjects: [], cachedReports: [] }
-  }
-
-  const projMap = new Map<string, { id: string; name: string }>()
-  const repMap = new Map<string, ProjectReportItem>()
-
-  try {
-    const savedNames: Record<string, string> = JSON.parse(
-      localStorage.getItem('insightflow_project_names') || '{}'
-    )
-
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i)
-      if (!k || !k.startsWith('insightflow_project_files_')) continue
-
-      const pid = k.replace('insightflow_project_files_', '')
-      if (!pid) continue
-
-      const pName = savedNames[pid] || 'Project'
-      projMap.set(pid, { id: pid, name: pName })
-
-      const cachedFiles = JSON.parse(localStorage.getItem(k) || '[]')
-      if (!Array.isArray(cachedFiles)) continue
-
-      for (const ds of cachedFiles) {
-        const fname = ds.fileName || ds.originalFileName || ds.name || 'Dataset'
-        const dsId = ds.datasetId || ds.id || fname
-        const insList = Array.isArray(ds.insights) ? ds.insights : []
-
-        repMap.set(`${pid}::${fname}`, {
-          projectId: pid,
-          projectName: pName,
-          datasetId: dsId,
-          fileName: fname,
-          rowCount: ds.rowCount ?? 0,
-          columnCount: ds.columnCount ?? 0,
-          uploadedAt: ds.uploadedAt || new Date().toISOString(),
-          insights: insList,
-        })
-      }
-    }
-  } catch {
-    // ignore storage read errors
-  }
-
-  const cachedReports = Array.from(repMap.values()).sort(
-    (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
-  )
-
-  return {
-    cachedProjects: Array.from(projMap.values()),
-    cachedReports,
-  }
-}
-
 function ReportsContent() {
   const searchParams = useSearchParams()
   const initialProjectId = searchParams?.get('projectId') || 'all'
@@ -105,85 +45,58 @@ function ReportsContent() {
   const [loading, setLoading] = useState(true)
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null)
   const [tokenDict, setTokenDict] = useState<Record<string, string>>({})
-  const hasHydratedRef = useRef(false)
 
   const currentLangObj =
-    SUPPORTED_LANGUAGES.find((l) => l.code === lang) || SUPPORTED_LANGUAGES[0]
+    SUPPORTED_LANGUAGES.find((l) => l.code === lang) || SUPPORTED_LANGUAGES[0]!
 
-  // 1) عرض فوري (0ms) من الكاش المحلي قبل انتظار السيرفر
-  useEffect(() => {
-    const { cachedProjects, cachedReports } = readCachedReportsFromStorage()
-    if (cachedProjects.length > 0) setProjects(cachedProjects)
-    if (cachedReports.length > 0) {
-      setReports(cachedReports)
-      setLoading(false)
-    }
-  }, [])
-
-  // 2) تحديث البيانات من الباك إند مرة واحدة فقط (غير مرتبط بتغيير اللغة)
   useEffect(() => {
     if (roleLoading) return
-    if (hasHydratedRef.current) return
-    hasHydratedRef.current = true
 
-    async function loadAllProjectReports() {
+    async function loadWorkspaceReports() {
+      setLoading(true)
       try {
-        const session = getSession()
-        const wsIds = new Set<string>()
-        if (activeWorkspaceId && activeWorkspaceId !== 'default') wsIds.add(activeWorkspaceId)
-        if (session?.workspaceId && session.workspaceId !== 'default') wsIds.add(session.workspaceId)
+        let targetWsId =
+          activeWorkspaceId && activeWorkspaceId !== 'default' ? activeWorkspaceId : ''
 
-        const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
-        if (Array.isArray(wsList)) {
-          wsList.forEach((w) => {
-            const id = w?.id || w?.workspaceId
-            if (id && id !== 'default') wsIds.add(id)
-          })
-        }
-
-        const projectMap = new Map<string, { id: string; name: string }>()
-        const projectNamesCache: Record<string, string> = {}
-
-        // جلب مشاريع كل مساحات العمل بالتوازي
-        const workspaceProjectsArrays = await Promise.all(
-          Array.from(wsIds).map((wsId) =>
-            apiRequest<any[]>(`/api/workspaces/${wsId}/projects`).catch(() => [])
-          )
-        )
-
-        workspaceProjectsArrays.forEach((rawProjects) => {
-          if (Array.isArray(rawProjects)) {
-            rawProjects.forEach((p) => {
-              const pid = p.id || p.projectId
-              const pname = p.name || 'Project'
-              if (pid) {
-                projectMap.set(pid, { id: pid, name: pname })
-                projectNamesCache[pid] = pname
-              }
-            })
-          }
-        })
-
-        // التقاط أي مشاريع مخزنة محلياً
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('insightflow_project_names', JSON.stringify(projectNamesCache))
-          for (let i = 0; i < localStorage.length; i++) {
-            const k = localStorage.key(i)
-            if (k && k.startsWith('insightflow_project_files_')) {
-              const pid = k.replace('insightflow_project_files_', '')
-              if (pid && !projectMap.has(pid)) {
-                projectMap.set(pid, { id: pid, name: projectNamesCache[pid] || 'Project' })
-              }
-            }
+        if (!targetWsId) {
+          const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
+          if (Array.isArray(wsList) && wsList.length > 0) {
+            targetWsId = wsList[0]?.id || wsList[0]?.workspaceId || ''
           }
         }
 
-        const projList = Array.from(projectMap.values())
+        if (!targetWsId) {
+          setProjects([])
+          setReports([])
+          return
+        }
+
+        const rawProjects = await apiRequest<any[]>(
+          `/api/workspaces/${targetWsId}/projects`
+        ).catch(() => [])
+
+        const projList: Array<{ id: string; name: string }> = Array.isArray(rawProjects)
+          ? rawProjects
+              .map((p: any) => {
+                const pid = p.id || p.projectId
+                if (!pid) return null
+                const pname =
+                  p.name || p.title || p.projectName || p.Name || p.Title || 'Untitled Project'
+                return { id: pid, name: pname }
+              })
+              .filter(Boolean) as Array<{ id: string; name: string }>
+          : []
+
         setProjects(projList)
+        if (
+          selectedProjectFilter !== 'all' &&
+          !projList.some((p) => p.id === selectedProjectFilter)
+        ) {
+          setSelectedProjectFilter('all')
+        }
 
         const uniqueReportsMap = new Map<string, ProjectReportItem>()
 
-        // جلب ملفات كل المشاريع بالتوازي لتسريع الفتح
         await Promise.all(
           projList.map(async (proj) => {
             const key = `insightflow_project_files_${proj.id}`
@@ -291,10 +204,10 @@ function ReportsContent() {
       }
     }
 
-    loadAllProjectReports()
+    loadWorkspaceReports()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspaceId, roleLoading])
 
-  // 3) ترجمة المصطلحات الديناميكية في 0ms من الكاش دون إظهار أي شاشة تحميل
   useEffect(() => {
     if (lang === 'ar' || reports.length === 0) {
       setTokenDict({})
@@ -377,7 +290,7 @@ ${rawFindings}`,
           localizedSummary = data?.reply || data?.message || ''
         }
       } catch {
-        // fallback if offline
+        // fallback
       }
 
       if (!localizedSummary) {
@@ -520,10 +433,10 @@ ${rawFindings}`,
                           <CheckCircle2 className="h-3.5 w-3.5" /> {t.analysisCompleted}
                         </span>
                         <span>
-                          • {rep.rowCount.toLocaleString(lang)} {t.recordsLabel}
+                          - {rep.rowCount.toLocaleString(lang)} {t.recordsLabel}
                         </span>
                         <span>
-                          • {rep.columnCount} {t.dimensionsAnalyzed}
+                          - {rep.columnCount} {t.dimensionsAnalyzed}
                         </span>
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />{' '}

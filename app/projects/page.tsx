@@ -154,7 +154,7 @@ export default function ProjectsPage() {
     loading: roleLoading,
   } = useWorkspaceRole()
   const { lang } = useTranslation()
-  const L = PROJECTS_LOCALES[lang] || PROJECTS_LOCALES.en
+  const L = PROJECTS_LOCALES[lang] || PROJECTS_LOCALES.en!
 
   const [projects, setProjects] = useState<ProjectItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -166,23 +166,26 @@ export default function ProjectsPage() {
       setLoading(true)
       try {
         const session = getSession()
-        let wsId = activeWorkspaceId || session?.workspaceId
+        let wsId =
+          (activeWorkspaceId && activeWorkspaceId !== 'default' ? activeWorkspaceId : '') ||
+          session?.workspaceId ||
+          ''
 
         if (!wsId) {
           const wsList = await apiRequest<any[]>('/api/workspaces').catch(() => [])
           const firstWs = wsList?.[0]
-          wsId = firstWs?.id || firstWs?.workspaceId
+          wsId = firstWs?.id || firstWs?.workspaceId || ''
         }
 
         if (wsId) {
-          // 1. عرض المشاريع المخبأة فوراً حتى لا تختفي أثناء استيقاظ السيرفر
           const cached = getCachedProjects(wsId)
           if (cached.length > 0) {
             setProjects(cached)
             setLoading(false)
+          } else {
+            setProjects([])
           }
 
-          // 2. جلب القائمة الحية مع إعادة محاولة تلقائية إذا كان الباك إند يستيقظ
           let projList = await apiRequest<any[]>(`/api/workspaces/${wsId}/projects`).catch(() => null)
           if (!Array.isArray(projList)) {
             await new Promise((r) => setTimeout(r, 2500))
@@ -192,18 +195,15 @@ export default function ProjectsPage() {
           if (Array.isArray(projList)) {
             const mapped = projList.map((p) => ({
               id: p.id || p.projectId,
-              name: p.name || 'Untitled Project',
-              description: p.description,
-              createdAt: p.createdAt,
+              name: p.name || p.title || p.projectName || p.Name || p.Title || 'Untitled Project',
+              description: p.description || p.Description,
+              createdAt: p.createdAt || p.CreatedAt,
             }))
-            if (mapped.length > 0 || cached.length === 0) {
-              setProjects(mapped)
-              setCachedProjects(wsId, mapped)
-            }
+            setProjects(mapped)
+            setCachedProjects(wsId, mapped)
           }
         } else {
-          const res = await apiRequest<any>('/api/projects').catch(() => [])
-          setProjects(Array.isArray(res) ? res : res?.items || [])
+          setProjects([])
         }
       } catch (error) {
         console.error('Failed to load projects:', error)
