@@ -33,6 +33,85 @@ type ProjectReportItem = {
   insights: Array<{ title: string; description: string; severity?: string }>
 }
 
+function cleanMarkdownSymbols(text: string): string {
+  if (!text) return ''
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, '‹$1›')
+    .replace(/\*+/g, '')
+    .replace(/^#+\s*/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function classifyInsightStatus(
+  title: string,
+  description: string,
+  lang: string
+): {
+  level: 'positive' | 'warning' | 'danger'
+  label: string
+  badgeBg: string
+  badgeColor: string
+  borderColor: string
+  dotColor: string
+} {
+  const combined = `${title} ${description}`.toLowerCase()
+
+  const isDanger =
+    /خطر|مخاطر|اعتماد مرتفع|تركز مرتفع|تركّز|انخفاض حاد|تراجع|صفر|critical|high concentration|risk|severe|decline|missing|0\)/i.test(
+      combined
+    ) ||
+    (/\b(8[0-9]|9[0-9]|100)%/.test(description) && !/اكتمال|completeness|100\s*%/i.test(title))
+
+  const isPositive =
+    /اكتمال البيانات|100\s*%|تتصدر|تفوق|نمو|ارتفاع|إيجابي|completeness|leading|outperform|growth|top|optimal|100%/i.test(
+      combined
+    )
+
+  if (isDanger) {
+    return {
+      level: 'danger',
+      label: lang === 'ar' ? 'خطر / تركز مرتفع' : 'High Risk',
+      badgeBg: '#fef2f2',
+      badgeColor: '#dc2626',
+      borderColor: '#fecaca',
+      dotColor: '#ef4444',
+    }
+  }
+
+  if (isPositive && !/تحذير|تباين|متوازن نسبياً|variance|moderate|warning/i.test(combined)) {
+    return {
+      level: 'positive',
+      label: lang === 'ar' ? 'إيجابي / فرصة نمو' : 'Positive',
+      badgeBg: '#f0fdf4',
+      badgeColor: '#16a34a',
+      borderColor: '#bbf7d0',
+      dotColor: '#22c55e',
+    }
+  }
+
+  return {
+    level: 'warning',
+    label: lang === 'ar' ? 'تحذير / يحتاج متابعة' : 'Warning',
+    badgeBg: '#fffbeb',
+    badgeColor: '#d97706',
+    borderColor: '#fde68a',
+    dotColor: '#f59e0b',
+  }
+}
+
+function resolveActualRowCount(rep: ProjectReportItem): number {
+  if (rep.rowCount && rep.rowCount > 0) return rep.rowCount
+  for (const ins of rep.insights) {
+    const match = ins.description?.match(/(\d[\d,]*)\s*(?:صف|سجل|rows|records)/i)
+    if (match?.[1]) {
+      const parsed = Number(match[1].replace(/,/g, ''))
+      if (parsed > 0) return parsed
+    }
+  }
+  return rep.rowCount || 0
+}
+
 function ReportsContent() {
   const searchParams = useSearchParams()
   const initialProjectId = searchParams?.get('projectId') || 'all'
@@ -261,46 +340,85 @@ function ReportsContent() {
     const key = `${rep.projectId}-${rep.fileName}`
     setDownloadingKey(key)
     try {
-      const targetLanguageName = `${currentLangObj.englishName} (${currentLangObj.nativeName})`
       const activeInsights = formatLocalizedInsights(rep.insights, lang, tokenDict)
-      const rawFindings = activeInsights
-        .map((i, idx) => `${idx + 1}. ${i.title}: ${i.description}`)
-        .join('\n')
-
-      let localizedSummary = ''
-
-      try {
-        const aiRes = await fetch('/api/copilot/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: `Generate a formal, well-structured executive data analysis report strictly in ${targetLanguageName}.
-Do NOT use any other language. Translate all titles, findings, metrics, and actionable recommendations into ${targetLanguageName}.
-Project: ${rep.projectName}
-Dataset: ${rep.fileName}
-Records: ${rep.rowCount}, Columns: ${rep.columnCount}
-Extracted Findings:
-${rawFindings}`,
-            workspaceName: rep.projectName,
-            projectId: rep.projectId,
-          }),
-        })
-        if (aiRes.ok) {
-          const data = await aiRes.json()
-          localizedSummary = data?.reply || data?.message || ''
-        }
-      } catch {
-        // fallback
-      }
-
-      if (!localizedSummary) {
-        localizedSummary = rawFindings
-      }
-
+      const actualRows = resolveActualRowCount(rep)
       const dir = currentLangObj.direction
       const formattedDate = new Date().toLocaleDateString(lang)
 
-      const printWindow = window.open('', '_blank', 'width=900,height=750')
+      const logoHtml = `
+        <div style="display:inline-flex;align-items:center;gap:10px;direction:ltr;">
+          <span style="font-family:'Segoe UI',system-ui,sans-serif;font-weight:800;font-size:21px;letter-spacing:-0.4px;color:#0f172a;">
+            InsightFlow
+          </span>
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;background:#3b82f6;box-shadow:0 3px 10px rgba(59,130,246,0.28);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 4v15a1 1 0 0 0 1 1h15" />
+              <line x1="9" y1="16" x2="9" y2="13" />
+              <line x1="13.5" y1="16" x2="13.5" y2="8" />
+              <line x1="18" y1="16" x2="18" y2="11" />
+            </svg>
+          </span>
+        </div>
+      `
+
+      const insightsBlocksHtml = activeInsights
+        .map((ins, idx) => {
+          const cleanTitle = cleanMarkdownSymbols(ins.title)
+          const parts = ins.description.split(
+            /التوصية:|Recommendation:|Empfehlung:|Recomendación:|Raccomandazione:|Recommandation:|Рекомендация:|Öneri:/i
+          )
+          const findingRaw = cleanMarkdownSymbols(parts[0] || '')
+          const recRaw = cleanMarkdownSymbols(parts[1] || '')
+          const status = classifyInsightStatus(cleanTitle, findingRaw, lang)
+
+          const bulletLines = findingRaw
+            .split(/\s+-\s+|\.\s+(?=[أ-يA-Z‹])/)
+            .map((s) => s.trim())
+            .filter(Boolean)
+
+          const bulletsHtml =
+            bulletLines.length > 1
+              ? `<ul style="margin:8px 0 0;padding-${dir === 'rtl' ? 'right' : 'left'}:18px;color:#334155;font-size:13.5px;line-height:1.75;">
+                  ${bulletLines.map((line) => `<li style="margin-bottom:4px;">${line}</li>`).join('')}
+                </ul>`
+              : `<p style="margin:8px 0 0;color:#334155;font-size:13.5px;line-height:1.75;">${findingRaw}</p>`
+
+          const recHtml = recRaw
+            ? `<div style="margin-top:10px;padding:10px 14px;border-radius:8px;background:#f8fafc;border-${dir === 'rtl' ? 'right' : 'left'}:3px solid #2563eb;font-size:13px;color:#1e293b;">
+                <strong style="color:#1d4ed8;">➤ ${t.recommendationLabel}:</strong> ${recRaw}
+              </div>`
+            : ''
+
+          const dividerHtml =
+            idx < activeInsights.length - 1
+              ? `<div style="height:1px;background:linear-gradient(to right,transparent,#cbd5e1,transparent);margin:18px 0;"></div>`
+              : ''
+
+          return `
+            <div style="padding:14px 16px;border-radius:12px;border:1px solid #e2e8f0;background:#ffffff;page-break-inside:avoid;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:#eff6ff;color:#1d4ed8;font-weight:700;font-size:12px;">
+                    ${idx + 1}
+                  </span>
+                  <h3 style="margin:0;font-size:15px;font-weight:700;color:#0f172a;">
+                    ${cleanTitle}
+                  </h3>
+                </div>
+                <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:11.5px;font-weight:700;background:${status.badgeBg};color:${status.badgeColor};border:1px solid ${status.borderColor};">
+                  <span style="width:7px;height:7px;border-radius:50%;background:${status.dotColor};display:inline-block;"></span>
+                  ${status.label}
+                </span>
+              </div>
+              ${bulletsHtml}
+              ${recHtml}
+            </div>
+            ${dividerHtml}
+          `
+        })
+        .join('')
+
+      const printWindow = window.open('', '_blank', 'width=940,height=800')
       if (printWindow) {
         printWindow.document.write(`<!DOCTYPE html>
 <html lang="${lang}" dir="${dir}">
@@ -308,30 +426,103 @@ ${rawFindings}`,
   <meta charset="UTF-8" />
   <title>${t.reportExecutiveTitle} - ${rep.fileName}</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 40px; color: #0f172a; line-height: 1.7; }
-    .header { border-bottom: 2px solid #2563eb; padding-bottom: 16px; margin-bottom: 24px; }
-    .brand { color: #2563eb; font-weight: 800; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
-    h1 { margin: 6px 0 10px; font-size: 24px; color: #0f172a; }
-    .meta { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: #475569; background: #f8fafc; padding: 12px 16px; border-radius: 8px; border: 1px solid #e2e8f0; }
-    .content { margin-top: 24px; white-space: pre-wrap; font-size: 14px; color: #1e293b; }
-    .footer { margin-top: 40px; padding-top: 12px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; }
+    @media print {
+      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, system-ui, -apple-system, Roboto, sans-serif;
+      padding: 36px 42px;
+      color: #0f172a;
+      background: #ffffff;
+      line-height: 1.65;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid #2563eb;
+      padding-bottom: 18px;
+      margin-bottom: 22px;
+    }
+    .title-block h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .title-block p {
+      margin: 3px 0 0;
+      font-size: 12px;
+      color: #64748b;
+    }
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      font-size: 12.5px;
+      color: #334155;
+      background: #f8fafc;
+      padding: 14px 16px;
+      border-radius: 10px;
+      border: 1px solid #e2e8f0;
+      margin-bottom: 24px;
+    }
+    .meta-item strong {
+      color: #0f172a;
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      opacity: 0.7;
+    }
+    .footer {
+      margin-top: 32px;
+      padding-top: 12px;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      font-size: 11.5px;
+      color: #64748b;
+    }
   </style>
 </head>
 <body>
   <div class="header">
-    <div class="brand">InsightFlow AI Analytics</div>
-    <h1>${t.reportExecutiveTitle}</h1>
-    <div class="meta">
-      <span><strong>${t.reportProjectLabel}:</strong> ${rep.projectName}</span>
-      <span><strong>${t.reportDatasetLabel}:</strong> ${rep.fileName}</span>
-      <span><strong>${t.recordsLabel}:</strong> ${rep.rowCount.toLocaleString(lang)}</span>
-      <span><strong>${t.reportLanguageLabel}:</strong> ${currentLangObj.nativeName}</span>
-      <span><strong>${t.reportGeneratedOn}:</strong> ${formattedDate}</span>
+    <div class="title-block">
+      <h1>${t.reportExecutiveTitle} — ${rep.fileName}</h1>
+      <p>${rep.projectName} · ${formattedDate}</p>
+    </div>
+    ${logoHtml}
+  </div>
+
+  <div class="meta">
+    <div class="meta-item">
+      <strong>${t.reportProjectLabel}</strong>
+      ${rep.projectName}
+    </div>
+    <div class="meta-item">
+      <strong>${t.reportDatasetLabel}</strong>
+      ${rep.fileName}
+    </div>
+    <div class="meta-item">
+      <strong>${t.recordsLabel}</strong>
+      ${actualRows.toLocaleString(lang)}
+    </div>
+    <div class="meta-item">
+      <strong>${t.dimensionsAnalyzed}</strong>
+      ${rep.columnCount}
     </div>
   </div>
-  <div class="content">${localizedSummary.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
-  <div class="footer">InsightFlow · ${currentLangObj.nativeName} (${lang.toUpperCase()})</div>
-  <script>window.onload = function() { window.print(); };</script>
+
+  <div>
+    ${insightsBlocksHtml}
+  </div>
+
+  <div class="footer">
+    <span>InsightFlow AI Analytics · ${currentLangObj.nativeName}</span>
+    <span>${formattedDate}</span>
+  </div>
+
+  <script>window.onload = function() { setTimeout(function() { window.print(); }, 250); };</script>
 </body>
 </html>`)
         printWindow.document.close()
@@ -397,13 +588,14 @@ ${rawFindings}`,
           {filteredReports.map((rep) => {
             const itemKey = `${rep.projectId}-${rep.fileName}`
             const isDownloading = downloadingKey === itemKey
+            const actualRows = resolveActualRowCount(rep)
             const displayedInsights =
               rep.insights.length > 0
                 ? formatLocalizedInsights(rep.insights, lang, tokenDict)
                 : [
                     {
                       title: `${t.reportDatasetLabel}: ${rep.fileName}`,
-                      description: `${rep.rowCount.toLocaleString(lang)} ${t.recordsLabel} & ${rep.columnCount} ${t.dimensionsAnalyzed}.`,
+                      description: `${actualRows.toLocaleString(lang)} ${t.recordsLabel} & ${rep.columnCount} ${t.dimensionsAnalyzed}.`,
                     },
                   ]
 
@@ -433,7 +625,7 @@ ${rawFindings}`,
                           <CheckCircle2 className="h-3.5 w-3.5" /> {t.analysisCompleted}
                         </span>
                         <span>
-                          - {rep.rowCount.toLocaleString(lang)} {t.recordsLabel}
+                          - {actualRows.toLocaleString(lang)} {t.recordsLabel}
                         </span>
                         <span>
                           - {rep.columnCount} {t.dimensionsAnalyzed}
@@ -482,11 +674,13 @@ ${rawFindings}`,
 
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     {displayedInsights.map((ins, iIdx) => {
+                      const cleanTitle = cleanMarkdownSymbols(ins.title)
                       const parts = ins.description.split(
                         /التوصية:|Recommendation:|Empfehlung:|Recomendación:|Raccomandazione:|Recommandation:|Рекомендация:|Öneri:/i
                       )
-                      const findingText = parts[0]?.trim()
-                      const recommendationText = parts[1]?.trim()
+                      const findingText = cleanMarkdownSymbols(parts[0] || '')
+                      const recommendationText = cleanMarkdownSymbols(parts[1] || '')
+                      const status = classifyInsightStatus(cleanTitle, findingText, lang)
 
                       return (
                         <div
@@ -494,7 +688,18 @@ ${rawFindings}`,
                           className="flex flex-col justify-between rounded-xl border border-border/80 bg-background/60 p-4 transition-colors hover:border-primary/40"
                         >
                           <div>
-                            <h3 className="text-sm font-bold text-foreground">{ins.title}</h3>
+                            <div className="flex items-start justify-between gap-2">
+                              <h3 className="text-sm font-bold text-foreground">{cleanTitle}</h3>
+                              <span
+                                className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold"
+                                style={{
+                                  backgroundColor: status.badgeBg,
+                                  color: status.badgeColor,
+                                }}
+                              >
+                                {status.label}
+                              </span>
+                            </div>
                             <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
                               {findingText}
                             </p>
