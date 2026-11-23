@@ -49,37 +49,6 @@ export class ApiError extends Error {
   }
 }
 
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit,
-  retries = 2
-): Promise<Response> {
-  const method = (options.method || "GET").toUpperCase();
-  const canRetry = method === "GET" || method === "POST";
-
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const res = await fetch(url, options);
-      if (
-        canRetry &&
-        attempt < retries &&
-        (res.status === 502 || res.status === 503 || res.status === 504 || res.status === 408)
-      ) {
-        await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
-        continue;
-      }
-      return res;
-    } catch (err) {
-      if (attempt < retries) {
-        await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
-        continue;
-      }
-      throw err;
-    }
-  }
-  return fetch(url, options);
-}
-
 export async function apiRequest<T>(
   path: string,
   options: RequestInit = {}
@@ -101,10 +70,19 @@ export async function apiRequest<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  const res = await fetchWithRetry(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers,
+      signal: options.signal || controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (res.status === 401 && typeof window !== "undefined" && !path.includes("/auth/")) {
     clearSession();
