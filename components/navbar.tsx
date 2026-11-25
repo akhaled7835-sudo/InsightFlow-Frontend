@@ -15,7 +15,6 @@ export function Navbar() {
     { label: t.features, href: '#features' },
     { label: t.dashboard, href: '#dashboard' },
     { label: t.insights, href: '#insights' },
-    { label: t.pricing, href: '#pricing' },
     { label: t.faq, href: '#faq' },
   ]
 
