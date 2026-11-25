@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { BarChart3, Eye, EyeOff, Mail, Lock, User, Sparkles, Loader2 } from "lucide-react"
 import { apiRequest, saveSession, ApiError } from "@/lib/api"
+import { initializeUserVaultKey } from "@/lib/crypto"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { useTranslation } from "@/lib/i18n"
 
@@ -133,8 +134,8 @@ export function LoginForm() {
           defaultProjectId: res.defaultProjectId,
           expiresAtUtc: res.expiresAtUtc,
         })
+        await initializeUserVaultKey(res.email || cleanEmail || "demo_user")
       } else if (mode === "register") {
-        // 1. منع التسجيل بنفس البريد الإلكتروني إذا كان مسجلاً مسبقاً
         const localMatch = getStoredAccounts().find(
           (a) => a.email.toLowerCase() === cleanEmail.toLowerCase()
         )
@@ -167,8 +168,8 @@ export function LoginForm() {
           fullName: res.fullName || cleanName,
           isDemo: false,
         })
+        await initializeUserVaultKey(cleanEmail, password)
       } else {
-        // تسجيل الدخول
         try {
           const res = await apiRequest<any>("/api/auth/login", {
             method: "POST",
@@ -191,8 +192,8 @@ export function LoginForm() {
             fullName: res.fullName || existingLocal?.fullName || cleanEmail.split("@")[0],
             isDemo: false,
           })
+          await initializeUserVaultKey(cleanEmail, password)
         } catch (loginErr) {
-          // في حال إعادة تشغيل السيرفر المجاني وفقدان الحساب من الذاكرة المؤقتة مع تطابق بيانات المستخدم المسجل سابقاً
           const localMatch = getStoredAccounts().find(
             (a) =>
               a.email.toLowerCase() === cleanEmail.toLowerCase() &&
@@ -216,6 +217,7 @@ export function LoginForm() {
               fullName: reSync.fullName || localMatch.fullName,
               isDemo: false,
             })
+            await initializeUserVaultKey(localMatch.email, localMatch.password)
           } else {
             throw loginErr
           }

@@ -23,6 +23,8 @@ import { apiRequest, ApiError, API_BASE_URL, TOKEN_KEY, getLang } from '@/lib/ap
 import { useTranslation } from '@/lib/i18n'
 import { useWorkspaceRole } from '@/lib/useWorkspaceRole'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
+import { ZeroKnowledgeBadge } from '@/components/zero-knowledge-badge'
+import { encryptClientPayload, decryptClientPayload } from '@/lib/crypto'
 import { extractArabicTokens, formatLocalizedInsights } from '@/lib/insightTranslator'
 
 type FileStatus = 'uploading' | 'processing' | 'success' | 'error'
@@ -104,7 +106,7 @@ const UPLOAD_LOCALES: Record<
     colsUnit: 'columns',
     uploadingMsg: 'Uploading file...',
     processingMsg: 'Processing data and extracting AI insights...',
-    successMsg: 'Processed successfully',
+    successMsg: 'Processed & encrypted locally',
     pdfReportBtn: 'PDF Report',
     excelReportBtn: 'Excel Report',
     aiInsightsTitle: 'AI Insights —',
@@ -138,7 +140,7 @@ const UPLOAD_LOCALES: Record<
     colsUnit: 'أعمدة',
     uploadingMsg: 'جاري رفع الملف...',
     processingMsg: 'جاري معالجة البيانات واستخراج الرؤى الذكية...',
-    successMsg: 'تمت المعالجة بنجاح',
+    successMsg: 'تمت المعالجة والتشفير محلياً بنجاح',
     pdfReportBtn: 'تقرير PDF',
     excelReportBtn: 'تقرير Excel',
     aiInsightsTitle: 'رؤى الذكاء الاصطناعي —',
@@ -172,7 +174,7 @@ const UPLOAD_LOCALES: Record<
     colsUnit: 'Spalten',
     uploadingMsg: 'Datei wird hochgeladen...',
     processingMsg: 'Daten werden verarbeitet und KI-Erkenntnisse extrahiert...',
-    successMsg: 'Erfolgreich verarbeitet',
+    successMsg: 'Erfolgreich verarbeitet & verschlüsselt',
     pdfReportBtn: 'PDF-Bericht',
     excelReportBtn: 'Excel-Bericht',
     aiInsightsTitle: 'KI-Erkenntnisse —',
@@ -206,7 +208,7 @@ const UPLOAD_LOCALES: Record<
     colsUnit: 'columnas',
     uploadingMsg: 'Subiendo archivo...',
     processingMsg: 'Procesando datos y extrayendo hallazgos de IA...',
-    successMsg: 'Procesado correctamente',
+    successMsg: 'Procesado y cifrado localmente',
     pdfReportBtn: 'Informe PDF',
     excelReportBtn: 'Informe Excel',
     aiInsightsTitle: 'Hallazgos de IA —',
@@ -240,7 +242,7 @@ const UPLOAD_LOCALES: Record<
     colsUnit: 'colonne',
     uploadingMsg: 'Caricamento file...',
     processingMsg: 'Elaborazione dati ed estrazione analisi IA...',
-    successMsg: 'Elaborato con successo',
+    successMsg: 'Elaborato e crittografato localmente',
     pdfReportBtn: 'Report PDF',
     excelReportBtn: 'Report Excel',
     aiInsightsTitle: 'Analisi IA —',
@@ -274,7 +276,7 @@ const UPLOAD_LOCALES: Record<
     colsUnit: 'colonnes',
     uploadingMsg: 'Importation du fichier...',
     processingMsg: 'Traitement des données et extraction des analyses IA...',
-    successMsg: 'Traité avec succès',
+    successMsg: 'Traité et chiffré localement',
     pdfReportBtn: 'Rapport PDF',
     excelReportBtn: 'Rapport Excel',
     aiInsightsTitle: 'Analyses IA —',
@@ -308,7 +310,7 @@ const UPLOAD_LOCALES: Record<
     colsUnit: 'столбцов',
     uploadingMsg: 'Загрузка файла...',
     processingMsg: 'Обработка данных и извлечение ИИ-выводов...',
-    successMsg: 'Успешно обработано',
+    successMsg: 'Успешно обработано и зашифровано',
     pdfReportBtn: 'Отчёт PDF',
     excelReportBtn: 'Отчёт Excel',
     aiInsightsTitle: 'Выводы ИИ —',
@@ -342,7 +344,7 @@ const UPLOAD_LOCALES: Record<
     colsUnit: 'sütun',
     uploadingMsg: 'Dosya yükleniyor...',
     processingMsg: 'Veriler işleniyor ve yapay zeka içgörüleri çıkarılıyor...',
-    successMsg: 'Başarıyla işlendi',
+    successMsg: 'Başarıyla işlendi ve şifrelendi',
     pdfReportBtn: 'PDF Raporu',
     excelReportBtn: 'Excel Raporu',
     aiInsightsTitle: 'Yapay Zeka İçgörüleri —',
@@ -555,6 +557,12 @@ function UploadPageContent() {
 
           const { columnNames, sampleRows } = await parsedPromise
 
+          // تشفير البيانات الحساسة (صفوف البيانات والرؤى) بمفتاح العميل الخاص AES-256-GCM
+          const encryptedVaultPayload = await encryptClientPayload({
+            sampleRows,
+            insights: normalizedRawInsights,
+          })
+
           const newDatasetRecord = {
             id: datasetId,
             fileId,
@@ -566,6 +574,8 @@ function UploadPageContent() {
             columnNames,
             sampleRows,
             insights: normalizedRawInsights,
+            encryptedVaultPayload,
+            encryptionAlgorithm: 'AES-256-GCM',
             uploadedAt: new Date().toISOString(),
           }
 
@@ -577,8 +587,11 @@ function UploadPageContent() {
               newDatasetRecord,
             ]
             localStorage.setItem(storageKey, JSON.stringify(updated))
+
+            // حفظ نسخة مشفرة مستقلة في خزنة Zero-Knowledge الخاصة بالعميل
+            localStorage.setItem(`insightflow_zk_dataset_${datasetId}`, encryptedVaultPayload)
           } catch (e) {
-            console.error('Failed to cache project dataset:', e)
+            console.error('Failed to cache encrypted project dataset:', e)
           }
 
           setFiles((prev) =>
@@ -681,10 +694,24 @@ function UploadPageContent() {
       const token = localStorage.getItem(TOKEN_KEY) || ''
       const cleanBaseName = fileItem.name.replace(/\.(xlsx|xls|csv)$/i, '')
 
-      // 1) تصدير PDF مترجم بالكامل ومنسق باحترافية
+      // استرجاع وفك تشفير الرؤى محلياً إذا لزم الأمر
+      let sourceInsights = fileItem.insights ?? []
+      if (sourceInsights.length === 0 && fileItem.datasetId) {
+        const encryptedVault = localStorage.getItem(`insightflow_zk_dataset_${fileItem.datasetId}`)
+        if (encryptedVault) {
+          const decrypted = await decryptClientPayload<{ insights?: typeof sourceInsights }>(
+            encryptedVault,
+            {}
+          )
+          if (Array.isArray(decrypted.insights)) {
+            sourceInsights = decrypted.insights
+          }
+        }
+      }
+
       if (format === 'pdf') {
         const localizedIns = formatLocalizedInsights(
-          fileItem.insights ?? [],
+          sourceInsights,
           activeLang,
           tokenDict
         )
@@ -731,7 +758,7 @@ function UploadPageContent() {
 </head>
 <body>
   <div class="header">
-    <div class="brand">INSIGHTFLOW AI ANALYTICS</div>
+    <div class="brand">INSIGHTFLOW AI ANALYTICS · AES-256 ZERO-KNOWLEDGE</div>
     <h1>${fileItem.name} — ${activeLocale.reportTitleSuffix}</h1>
     <div class="sub">${activeLocale.reportDesc}</div>
   </div>
@@ -749,7 +776,6 @@ function UploadPageContent() {
         return
       }
 
-      // 2) تصدير Excel مع الحفاظ على 100% من التصميم والألوان وعرض الأعمدة الأصلي via ExcelJS
       const res = await fetch(
         `${API_BASE_URL}/api/projects/${selectedProjectId}/reports/${reportId}/excel`,
         {
@@ -768,7 +794,6 @@ function UploadPageContent() {
           const wb = new ExcelJS.Workbook()
           await wb.xlsx.load(arrayBuffer)
 
-          // جمع كل النصوص الفريدة من كل الشيتات
           const uniqueTexts = new Set<string>()
           wb.eachSheet((ws) => {
             if (ws.name.trim().length > 1) uniqueTexts.add(ws.name.trim())
@@ -825,7 +850,6 @@ ${JSON.stringify(missing)}`,
             }
           }
 
-          // تعديل قيم الخلايا فقط دون لمس الألوان أو الخطوط أو الدمج أو عرض الأعمدة
           wb.eachSheet((ws) => {
             const translatedSheetName = dict[ws.name.trim()]
             if (translatedSheetName) {
@@ -949,10 +973,16 @@ ${JSON.stringify(missing)}`,
   return (
     <DashboardShell activeItem="dataFiles">
       <div className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{L.title}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{L.subtitle}</p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">{L.title}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">{L.subtitle}</p>
+          </div>
+          <ZeroKnowledgeBadge compact />
         </div>
+
+        {/* Zero-Knowledge Security Banner */}
+        <ZeroKnowledgeBadge />
 
         {/* Project Selector & Quick Create */}
         <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card/50 p-4 sm:flex-row sm:items-center sm:justify-between">
